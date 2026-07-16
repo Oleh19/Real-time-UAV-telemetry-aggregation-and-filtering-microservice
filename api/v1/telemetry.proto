@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package telemetry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "uavmonitor/gen/telemetryv1";
+
+message DroneTelemetry {
+  string drone_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  double latitude = 3;
+  double longitude = 4;
+  double altitude = 5;
+  float speed = 6;
+  int32 battery_percentage = 7;
+}
+
+message ZoneBreach {
+  string drone_id = 1;
+  int64 zone_id = 2;
+  string zone_name = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  double latitude = 5;
+  double longitude = 6;
+  double altitude = 7;
+}
+
+message StreamSummary {
+  int64 received_count = 1;
+  int64 dropped_count = 2;
+  int64 rejected_count = 3;
+}
+
+service TelemetryService {
+  rpc StreamTelemetry(stream DroneTelemetry) returns (StreamSummary);
+}

@@ -1,0 +1,17 @@
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.claude-*
+
+*.exe
+*.test
+*.out
+/bin/
+/out/
+
+.env
+.env.*
+
+.DS_Store
+.idea/
+.vscode/
