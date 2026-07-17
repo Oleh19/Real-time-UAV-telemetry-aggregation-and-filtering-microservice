@@ -91,22 +91,21 @@ func (m *fakeMsg) state() (acked, naked, termed bool) {
 	return m.acked, m.naked, m.termed
 }
 
-type fakeZoneRepo struct {
-	mu       sync.Mutex
-	zones    []telemetry.NoFlyZone
-	zonesErr error
+type fakeLocator struct {
+	mu    sync.Mutex
+	zones []telemetry.Zone
 }
 
-func (r *fakeZoneRepo) BreachedZones(_ context.Context, _, _ float64) ([]telemetry.NoFlyZone, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.zones, r.zonesErr
+func (l *fakeLocator) Containing(_, _ float64) []telemetry.Zone {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.zones
 }
 
-func (r *fakeZoneRepo) setZones(zones []telemetry.NoFlyZone) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.zones = zones
+func (l *fakeLocator) setZones(zones []telemetry.Zone) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.zones = zones
 }
 
 type fakeAlerts struct {
@@ -166,8 +165,8 @@ func payloadAt(id string, ts time.Time) []byte {
 	return payload
 }
 
-func eventually(deadline time.Duration, condition func() bool) bool {
-	limit := time.Now().Add(deadline)
+func eventually(condition func() bool) bool {
+	limit := time.Now().Add(2 * time.Second)
 	for time.Now().Before(limit) {
 		if condition() {
 			return true

@@ -1,0 +1,34 @@
+<section class="panel" aria-label="Ingest metrics">
+  <header class="panel-header">
+    <h2>Ingest</h2>
+    <span class="status" [class.status-online]="telemetry.connected()" role="status">
+      {{ telemetry.connected() ? 'online' : 'offline' }}
+    </span>
+  </header>
+  @if (telemetry.stats(); as stats) {
+    <dl class="tiles">
+      <div class="tile">
+        <dt>received</dt>
+        <dd>{{ stats.Received }}</dd>
+      </div>
+      <div class="tile">
+        <dt>published</dt>
+        <dd>{{ stats.Published }}</dd>
+      </div>
+      <div class="tile">
+        <dt>dropped</dt>
+        <dd>{{ stats.Dropped }}</dd>
+      </div>
+      <div class="tile">
+        <dt>failed</dt>
+        <dd>{{ stats.Failed }}</dd>
+      </div>
+      <div class="tile">
+        <dt>rejected</dt>
+        <dd>{{ stats.Rejected }}</dd>
+      </div>
+    </dl>
+  } @else {
+    <p class="placeholder">Waiting for backend data</p>
+  }
+</section>

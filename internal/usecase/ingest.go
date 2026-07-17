@@ -121,7 +121,7 @@ func (i *Ingestor) Submit(ctx context.Context, sample telemetry.Sample) error {
 	i.received.Add(1)
 	if err := sample.Validate(); err != nil {
 		i.rejected.Add(1)
-		return fmt.Errorf("%w: %s", ErrInvalidSample, err)
+		return fmt.Errorf("%w: %w", ErrInvalidSample, err)
 	}
 	i.storeLastKnown(sample)
 	select {

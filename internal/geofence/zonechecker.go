@@ -14,18 +14,13 @@ import (
 	"uavmonitor/internal/telemetry"
 )
 
-type ZoneRepository interface {
-	BreachedZones(ctx context.Context, longitude, latitude float64) ([]telemetry.NoFlyZone, error)
-}
-
 type AlertPublisher interface {
 	PublishAlert(ctx context.Context, breach telemetry.ZoneBreach) error
 }
 
 const (
-	staleDroneStateAfter = 10 * time.Minute
-	pruneStateEvery      = time.Minute
-	redeliveryDelay      = 5 * time.Second
+	staleDroneStateAfter = time.Minute
+	pruneStateEvery      = 10 * time.Second
 )
 
 type droneZoneState struct {
@@ -35,7 +30,7 @@ type droneZoneState struct {
 }
 
 type ZoneChecker struct {
-	repo      ZoneRepository
+	zones     ZoneLocator
 	alerts    AlertPublisher
 	logger    *slog.Logger
 	mu        sync.Mutex
@@ -43,9 +38,9 @@ type ZoneChecker struct {
 	lastPrune time.Time
 }
 
-func NewZoneChecker(repo ZoneRepository, alerts AlertPublisher, logger *slog.Logger) *ZoneChecker {
+func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logger) *ZoneChecker {
 	return &ZoneChecker{
-		repo:   repo,
+		zones:  zones,
 		alerts: alerts,
 		logger: logger,
 		state:  make(map[telemetry.DroneID]*droneZoneState),
@@ -77,7 +72,10 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 				case <-ctx.Done():
 					return
 				case msg := <-messages:
-					z.acknowledge(msg, z.Process(ctx, msg.Data()))
+					z.Process(ctx, msg.Data())
+					if err := msg.Ack(); err != nil {
+						z.logger.Error("ack telemetry message", "error", err)
+					}
 				}
 			}
 		}()
@@ -86,34 +84,18 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 	return nil
 }
 
-func (z *ZoneChecker) acknowledge(msg jetstream.Msg, processErr error) {
-	if processErr != nil {
-		z.logger.Error("process telemetry", "error", processErr)
-		if err := msg.NakWithDelay(redeliveryDelay); err != nil {
-			z.logger.Error("nak telemetry message", "error", err)
-		}
-		return
-	}
-	if err := msg.Ack(); err != nil {
-		z.logger.Error("ack telemetry message", "error", err)
-	}
-}
-
-func (z *ZoneChecker) Process(ctx context.Context, payload []byte) error {
+func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 	sample, ok := decodeSample(payload, z.logger)
 	if !ok {
-		return nil
+		return
 	}
 
-	zones, err := z.repo.BreachedZones(ctx, sample.Longitude, sample.Latitude)
-	if err != nil {
-		return fmt.Errorf("check nofly zones for %s: %w", sample.DroneID, err)
-	}
+	zones := z.zones.Containing(sample.Longitude, sample.Latitude)
 
 	entered, exited := z.diffZones(sample, zones)
 	for _, zone := range entered {
 		z.logger.Error(
-			fmt.Sprintf("ALERT: Drone %s breached No-Fly Zone %s!", sample.DroneID, zone.Name),
+			fmt.Sprintf("ALERT: Drone %s entered the alert zone of %s!", sample.DroneID, zone.Name),
 			"drone_id", sample.DroneID,
 			"zone_id", zone.ID,
 			"zone_name", zone.Name,
@@ -126,16 +108,28 @@ func (z *ZoneChecker) Process(ctx context.Context, payload []byte) error {
 		}
 	}
 	for _, zone := range exited {
-		z.logger.Info("drone left no-fly zone",
+		z.logger.Info("drone left alert zone",
 			"drone_id", sample.DroneID,
 			"zone_id", zone.ID,
 			"zone_name", zone.Name,
 		)
 	}
-	return nil
 }
 
-func (z *ZoneChecker) diffZones(sample telemetry.Sample, current []telemetry.NoFlyZone) (entered, exited []telemetry.NoFlyZone) {
+func (z *ZoneChecker) ActiveAlarms() map[telemetry.ZoneID]int {
+	z.mu.Lock()
+	defer z.mu.Unlock()
+	z.pruneLocked(time.Now())
+	alarms := make(map[telemetry.ZoneID]int)
+	for _, st := range z.state {
+		for id := range st.zones {
+			alarms[id]++
+		}
+	}
+	return alarms
+}
+
+func (z *ZoneChecker) diffZones(sample telemetry.Sample, current []telemetry.Zone) (entered, exited []telemetry.Zone) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 
@@ -161,7 +155,7 @@ func (z *ZoneChecker) diffZones(sample telemetry.Sample, current []telemetry.NoF
 	}
 	for id, name := range st.zones {
 		if _, in := currentSet[id]; !in {
-			exited = append(exited, telemetry.NoFlyZone{ID: id, Name: name})
+			exited = append(exited, telemetry.Zone{ID: id, Name: name})
 		}
 	}
 
@@ -190,12 +184,12 @@ func decodeSample(payload []byte, logger *slog.Logger) (telemetry.Sample, bool) 
 		return telemetry.Sample{}, false
 	}
 	return telemetry.Sample{
-		DroneID:           telemetry.DroneID(pb.GetDroneId()),
-		Timestamp:         pb.GetTimestamp().AsTime(),
-		Latitude:          pb.GetLatitude(),
-		Longitude:         pb.GetLongitude(),
-		Altitude:          pb.GetAltitude(),
-		Speed:             pb.GetSpeed(),
-		BatteryPercentage: pb.GetBatteryPercentage(),
+		DroneID:    telemetry.DroneID(pb.GetDroneId()),
+		Timestamp:  pb.GetTimestamp().AsTime(),
+		Latitude:   pb.GetLatitude(),
+		Longitude:  pb.GetLongitude(),
+		Altitude:   pb.GetAltitude(),
+		Speed:      pb.GetSpeed(),
+		Confidence: pb.GetConfidence(),
 	}, true
 }

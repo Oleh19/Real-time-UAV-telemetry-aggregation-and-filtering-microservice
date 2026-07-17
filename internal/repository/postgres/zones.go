@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -22,36 +23,85 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 const queryTimeout = 3 * time.Second
 
-func (r *Repository) BreachedZones(ctx context.Context, longitude, latitude float64) ([]telemetry.NoFlyZone, error) {
+func (r *Repository) ListAlertZoneFeatures(ctx context.Context) ([]ZoneFeature, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, name
-		   FROM nofly_zones
-		  WHERE ST_Intersects(boundary, ST_SetSRID(ST_MakePoint($1, $2), 4326))`,
-		longitude, latitude,
+		`SELECT id, name, ST_AsGeoJSON(alert_zone)
+		   FROM oblasts
+		  ORDER BY name`,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query nofly zones: %w", err)
+		return nil, fmt.Errorf("query alert zone features: %w", err)
+	}
+	defer rows.Close()
+	return scanZoneFeatures(rows)
+}
+
+func (r *Repository) ListZones(ctx context.Context) ([]telemetry.Zone, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM oblasts ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("query oblasts: %w", err)
 	}
 	defer rows.Close()
 
-	var zones []telemetry.NoFlyZone
+	var zones []telemetry.Zone
 	for rows.Next() {
-		var z telemetry.NoFlyZone
+		var z telemetry.Zone
 		if err := rows.Scan(&z.ID, &z.Name); err != nil {
-			return nil, fmt.Errorf("scan nofly zone: %w", err)
+			return nil, fmt.Errorf("scan oblast: %w", err)
 		}
 		zones = append(zones, z)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate nofly zones: %w", err)
+		return nil, fmt.Errorf("iterate oblasts: %w", err)
 	}
 	return zones, nil
 }
 
-const insertHistorySQL = `INSERT INTO telemetry_history (drone_id, recorded_at, position, altitude, speed, battery_percentage)
+type ZoneFeature struct {
+	Zone     telemetry.Zone
+	Geometry json.RawMessage
+}
+
+func (r *Repository) ListZoneFeatures(ctx context.Context) ([]ZoneFeature, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, name, ST_AsGeoJSON(boundary)
+		   FROM oblasts
+		  ORDER BY name`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query zone features: %w", err)
+	}
+	defer rows.Close()
+	return scanZoneFeatures(rows)
+}
+
+func scanZoneFeatures(rows pgx.Rows) ([]ZoneFeature, error) {
+	var features []ZoneFeature
+	for rows.Next() {
+		var f ZoneFeature
+		var geometry string
+		if err := rows.Scan(&f.Zone.ID, &f.Zone.Name, &geometry); err != nil {
+			return nil, fmt.Errorf("scan zone feature: %w", err)
+		}
+		f.Geometry = json.RawMessage(geometry)
+		features = append(features, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate zone features: %w", err)
+	}
+	return features, nil
+}
+
+const insertHistorySQL = `INSERT INTO telemetry_history (drone_id, recorded_at, position, altitude, speed, confidence)
 	 VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7)
 	 ON CONFLICT (drone_id, recorded_at) DO NOTHING`
 
@@ -73,7 +123,7 @@ func (r *Repository) SaveHistoryBatch(ctx context.Context, samples []telemetry.S
 			sample.Latitude,
 			sample.Altitude,
 			sample.Speed,
-			sample.BatteryPercentage,
+			sample.Confidence,
 		)
 	}
 

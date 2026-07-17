@@ -2,7 +2,6 @@ package geofence_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -12,40 +11,32 @@ import (
 )
 
 func TestZoneCheckerAlertsOnEnterOnly(t *testing.T) {
-	repo := &fakeZoneRepo{}
+	locator := &fakeLocator{}
 	alerts := &fakeAlerts{}
-	checker := geofence.NewZoneChecker(repo, alerts, discardLogger())
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
 	ctx := context.Background()
 	base := time.Now()
-	zone := telemetry.NoFlyZone{ID: 7, Name: "Restricted Object Alpha"}
+	zone := telemetry.Zone{ID: 7, Name: "Kyiv Oblast"}
 
-	repo.setZones([]telemetry.NoFlyZone{zone})
-	if err := checker.Process(ctx, payloadAt("drone-001", base)); err != nil {
-		t.Fatalf("Process(enter): %v", err)
-	}
+	locator.setZones([]telemetry.Zone{zone})
+	checker.Process(ctx, payloadAt("drone-001", base))
 	if got := alerts.count(); got != 1 {
 		t.Fatalf("alerts after entering zone = %d, want 1", got)
 	}
 
-	if err := checker.Process(ctx, payloadAt("drone-001", base.Add(time.Second))); err != nil {
-		t.Fatalf("Process(stay): %v", err)
-	}
+	checker.Process(ctx, payloadAt("drone-001", base.Add(time.Second)))
 	if got := alerts.count(); got != 1 {
 		t.Fatalf("alerts while staying in zone = %d, want still 1", got)
 	}
 
-	repo.setZones(nil)
-	if err := checker.Process(ctx, payloadAt("drone-001", base.Add(2*time.Second))); err != nil {
-		t.Fatalf("Process(exit): %v", err)
-	}
+	locator.setZones(nil)
+	checker.Process(ctx, payloadAt("drone-001", base.Add(2*time.Second)))
 	if got := alerts.count(); got != 1 {
 		t.Fatalf("alerts after leaving zone = %d, want still 1", got)
 	}
 
-	repo.setZones([]telemetry.NoFlyZone{zone})
-	if err := checker.Process(ctx, payloadAt("drone-001", base.Add(3*time.Second))); err != nil {
-		t.Fatalf("Process(re-enter): %v", err)
-	}
+	locator.setZones([]telemetry.Zone{zone})
+	checker.Process(ctx, payloadAt("drone-001", base.Add(3*time.Second)))
 	if got := alerts.count(); got != 2 {
 		t.Fatalf("alerts after re-entering zone = %d, want 2", got)
 	}
@@ -60,66 +51,72 @@ func TestZoneCheckerAlertsOnEnterOnly(t *testing.T) {
 	}
 }
 
-func TestZoneCheckerIgnoresOutOfOrderSamples(t *testing.T) {
-	repo := &fakeZoneRepo{}
+func TestZoneCheckerActiveAlarms(t *testing.T) {
+	locator := &fakeLocator{}
 	alerts := &fakeAlerts{}
-	checker := geofence.NewZoneChecker(repo, alerts, discardLogger())
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
 	ctx := context.Background()
 	base := time.Now()
-	zone := telemetry.NoFlyZone{ID: 7, Name: "Alpha"}
+	kyiv := telemetry.Zone{ID: 1, Name: "Kyiv Oblast"}
+	lviv := telemetry.Zone{ID: 2, Name: "Lviv Oblast"}
 
-	if err := checker.Process(ctx, payloadAt("drone-001", base)); err != nil {
-		t.Fatalf("Process(current): %v", err)
+	if len(checker.ActiveAlarms()) != 0 {
+		t.Fatal("expected no alarms initially")
 	}
 
-	repo.setZones([]telemetry.NoFlyZone{zone})
-	if err := checker.Process(ctx, payloadAt("drone-001", base.Add(-time.Second))); err != nil {
-		t.Fatalf("Process(stale): %v", err)
+	locator.setZones([]telemetry.Zone{kyiv})
+	checker.Process(ctx, payloadAt("drone-001", base))
+	locator.setZones([]telemetry.Zone{kyiv, lviv})
+	checker.Process(ctx, payloadAt("drone-002", base))
+
+	alarms := checker.ActiveAlarms()
+	if alarms[kyiv.ID] != 2 {
+		t.Errorf("alarms[kyiv] = %d, want 2 drones", alarms[kyiv.ID])
 	}
+	if alarms[lviv.ID] != 1 {
+		t.Errorf("alarms[lviv] = %d, want 1 drone", alarms[lviv.ID])
+	}
+
+	locator.setZones(nil)
+	checker.Process(ctx, payloadAt("drone-001", base.Add(time.Second)))
+	alarms = checker.ActiveAlarms()
+	if alarms[kyiv.ID] != 1 {
+		t.Errorf("alarms[kyiv] after drone-001 left = %d, want 1", alarms[kyiv.ID])
+	}
+}
+
+func TestZoneCheckerIgnoresOutOfOrderSamples(t *testing.T) {
+	locator := &fakeLocator{}
+	alerts := &fakeAlerts{}
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
+	ctx := context.Background()
+	base := time.Now()
+	zone := telemetry.Zone{ID: 7, Name: "Kyiv Oblast"}
+
+	checker.Process(ctx, payloadAt("drone-001", base))
+
+	locator.setZones([]telemetry.Zone{zone})
+	checker.Process(ctx, payloadAt("drone-001", base.Add(-time.Second)))
 	if got := alerts.count(); got != 0 {
 		t.Errorf("alerts from stale out-of-order sample = %d, want 0", got)
 	}
 }
 
-func TestZoneCheckerProcessErrors(t *testing.T) {
-	tests := []struct {
-		name    string
-		payload []byte
-		repo    *fakeZoneRepo
-		wantErr bool
-	}{
-		{
-			name:    "garbage payload dropped without error",
-			payload: []byte{0xff, 0xff, 0xff, 0xff},
-			repo:    &fakeZoneRepo{},
-			wantErr: false,
-		},
-		{
-			name:    "zone query failure returned for redelivery",
-			payload: payloadAt("drone-001", time.Now()),
-			repo:    &fakeZoneRepo{zonesErr: errors.New("query failed")},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			alerts := &fakeAlerts{}
-			checker := geofence.NewZoneChecker(tt.repo, alerts, discardLogger())
-			err := checker.Process(context.Background(), tt.payload)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("Process() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got := alerts.count(); got != 0 {
-				t.Errorf("alerts = %d, want 0", got)
-			}
-		})
+func TestZoneCheckerIgnoresGarbagePayload(t *testing.T) {
+	locator := &fakeLocator{zones: []telemetry.Zone{{ID: 7, Name: "Kyiv Oblast"}}}
+	alerts := &fakeAlerts{}
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
+
+	checker.Process(context.Background(), []byte{0xff, 0xff, 0xff, 0xff})
+	if got := alerts.count(); got != 0 {
+		t.Errorf("alerts from garbage payload = %d, want 0", got)
 	}
 }
 
 func TestZoneCheckerRunAcksMessages(t *testing.T) {
-	repo := &fakeZoneRepo{}
+	locator := &fakeLocator{}
 	alerts := &fakeAlerts{}
-	checker := geofence.NewZoneChecker(repo, alerts, discardLogger())
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
 	consumer := &fakeConsumer{}
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -133,20 +130,11 @@ func TestZoneCheckerRunAcksMessages(t *testing.T) {
 	}()
 
 	msg := &fakeMsg{data: payloadAt("drone-001", time.Now())}
-	if !eventually(2*time.Second, func() bool { return consumer.push(msg) }) {
+	if !eventually(func() bool { return consumer.push(msg) }) {
 		t.Fatal("consumer handler was not registered")
 	}
-	if !eventually(2*time.Second, func() bool { acked, _, _ := msg.state(); return acked }) {
+	if !eventually(func() bool { acked, _, _ := msg.state(); return acked }) {
 		t.Error("message was not acked")
-	}
-
-	badMsg := &fakeMsg{data: payloadAt("drone-002", time.Now())}
-	repo.mu.Lock()
-	repo.zonesErr = errors.New("query failed")
-	repo.mu.Unlock()
-	consumer.push(badMsg)
-	if !eventually(2*time.Second, func() bool { _, naked, _ := badMsg.state(); return naked }) {
-		t.Error("message was not naked on processing failure")
 	}
 
 	cancel()

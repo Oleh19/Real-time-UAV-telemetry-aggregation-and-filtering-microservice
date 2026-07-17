@@ -1,0 +1,13 @@
+gen/
+.claude/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+go.mod
+go.sum
+Makefile
+Dockerfile
+deploy/
+CLAUDE.md
+internal/repository/postgres/oblasts.geojson

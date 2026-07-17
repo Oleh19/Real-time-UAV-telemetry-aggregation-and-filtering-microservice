@@ -1,0 +1,22 @@
+{
+  "/api/stream": {
+    "target": "http://host.docker.internal:8080",
+    "pathRewrite": { "^/api/stream": "/events" }
+  },
+  "/api/alert-stream": {
+    "target": "http://host.docker.internal:8081",
+    "pathRewrite": { "^/api/alert-stream": "/events" }
+  },
+  "/api/zones": {
+    "target": "http://host.docker.internal:8081",
+    "pathRewrite": { "^/api": "" }
+  },
+  "/api/alerts": {
+    "target": "http://host.docker.internal:8081",
+    "pathRewrite": { "^/api": "" }
+  },
+  "/api": {
+    "target": "http://host.docker.internal:8080",
+    "pathRewrite": { "^/api": "" }
+  }
+}

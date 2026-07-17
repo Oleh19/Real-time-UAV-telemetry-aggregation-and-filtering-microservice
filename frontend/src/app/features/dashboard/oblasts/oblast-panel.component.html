@@ -1,0 +1,22 @@
+<section class="panel" aria-label="Oblast air alerts">
+  <header class="panel-header">
+    <h2>Air alerts</h2>
+    <span class="alarm-count" [class.alarm-count-active]="alarmedCount() > 0">
+      {{ alarmedCount() }}
+    </span>
+  </header>
+  @if (telemetry.alerts().length > 0) {
+    <ul class="oblasts">
+      @for (alert of telemetry.alerts(); track alert.id) {
+        <li class="oblast" [class.oblast-alarmed]="alert.alarmed">
+          <span class="oblast-name">{{ alert.name }}</span>
+          @if (alert.alarmed) {
+            <span class="oblast-drones">{{ alert.drones }}</span>
+          }
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">Waiting for oblast data</p>
+  }
+</section>

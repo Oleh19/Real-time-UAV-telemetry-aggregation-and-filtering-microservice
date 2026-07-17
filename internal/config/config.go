@@ -17,11 +17,9 @@ type Server struct {
 }
 
 type Simulator struct {
-	ServerAddr     string
-	DroneCount     int
-	SendInterval   time.Duration
-	StartLatitude  float64
-	StartLongitude float64
+	ServerAddr   string
+	DroneCount   int
+	SendInterval time.Duration
 }
 
 type Geofence struct {
@@ -77,20 +75,10 @@ func LoadSimulator() (Simulator, error) {
 	if err != nil {
 		return Simulator{}, err
 	}
-	startLat, err := floatEnv("START_LATITUDE", 50.45)
-	if err != nil {
-		return Simulator{}, err
-	}
-	startLon, err := floatEnv("START_LONGITUDE", 30.52)
-	if err != nil {
-		return Simulator{}, err
-	}
 	cfg := Simulator{
-		ServerAddr:     strEnv("SERVER_ADDR", "localhost:50051"),
-		DroneCount:     droneCount,
-		SendInterval:   sendInterval,
-		StartLatitude:  startLat,
-		StartLongitude: startLon,
+		ServerAddr:   strEnv("SERVER_ADDR", "localhost:50051"),
+		DroneCount:   droneCount,
+		SendInterval: sendInterval,
 	}
 	if cfg.DroneCount < 1 {
 		return Simulator{}, fmt.Errorf("validate DRONE_COUNT: must be >= 1, got %d", cfg.DroneCount)
@@ -163,18 +151,6 @@ func intEnv(key string, fallback int) (int, error) {
 		return fallback, nil
 	}
 	parsed, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("parse %s: %w", key, err)
-	}
-	return parsed, nil
-}
-
-func floatEnv(key string, fallback float64) (float64, error) {
-	v, ok := os.LookupEnv(key)
-	if !ok || v == "" {
-		return fallback, nil
-	}
-	parsed, err := strconv.ParseFloat(v, 64)
 	if err != nil {
 		return 0, fmt.Errorf("parse %s: %w", key, err)
 	}

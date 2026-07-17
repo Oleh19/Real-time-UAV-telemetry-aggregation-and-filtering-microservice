@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -27,16 +28,72 @@ func NewJetStream(ctx context.Context, conn *nats.Conn) (jetstream.JetStream, er
 	if err != nil {
 		return nil, fmt.Errorf("create jetstream context: %w", err)
 	}
-	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+	if err := ensureStream(ctx, js); err != nil {
+		return nil, err
+	}
+	return js, nil
+}
+
+func ensureStream(ctx context.Context, js jetstream.JetStream) error {
+	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     StreamName,
 		Subjects: []string{"drone.>"},
 		Storage:  jetstream.FileStorage,
 		MaxAge:   streamMaxAge,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ensure stream %s: %w", StreamName, err)
+		return fmt.Errorf("ensure stream %s: %w", StreamName, err)
 	}
-	return js, nil
+	return nil
+}
+
+type AsyncPublisher struct {
+	js     jetstream.JetStream
+	logger *slog.Logger
+	failed atomic.Int64
+}
+
+func NewAsyncPublisher(ctx context.Context, conn *nats.Conn, logger *slog.Logger) (*AsyncPublisher, error) {
+	publisher := &AsyncPublisher{logger: logger}
+	js, err := jetstream.New(conn,
+		jetstream.WithPublishAsyncMaxPending(4096),
+		jetstream.WithPublishAsyncErrHandler(func(_ jetstream.JetStream, msg *nats.Msg, err error) {
+			publisher.failed.Add(1)
+			logger.Error("async publish failed", "subject", msg.Subject, "error", err)
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create jetstream context: %w", err)
+	}
+	if err := ensureStream(ctx, js); err != nil {
+		return nil, err
+	}
+	publisher.js = js
+	return publisher, nil
+}
+
+func (p *AsyncPublisher) Publish(_ context.Context, sample telemetry.Sample) error {
+	payload, err := proto.Marshal(toProto(sample))
+	if err != nil {
+		return fmt.Errorf("marshal telemetry: %w", err)
+	}
+	if _, err := p.js.PublishAsync(SubjectTelemetry, payload); err != nil {
+		return fmt.Errorf("publish to %s: %w", SubjectTelemetry, err)
+	}
+	return nil
+}
+
+func (p *AsyncPublisher) Failed() int64 {
+	return p.failed.Load()
+}
+
+func (p *AsyncPublisher) Flush(ctx context.Context) error {
+	select {
+	case <-p.js.PublishAsyncComplete():
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("flush pending telemetry: %w", ctx.Err())
+	}
 }
 
 func Connect(url string, logger *slog.Logger) (*nats.Conn, error) {
@@ -98,13 +155,13 @@ func (p *Publisher) PublishAlert(ctx context.Context, breach telemetry.ZoneBreac
 
 func toProto(sample telemetry.Sample) *telemetryv1.DroneTelemetry {
 	return &telemetryv1.DroneTelemetry{
-		DroneId:           string(sample.DroneID),
-		Timestamp:         timestamppb.New(sample.Timestamp),
-		Latitude:          sample.Latitude,
-		Longitude:         sample.Longitude,
-		Altitude:          sample.Altitude,
-		Speed:             sample.Speed,
-		BatteryPercentage: sample.BatteryPercentage,
+		DroneId:    string(sample.DroneID),
+		Timestamp:  timestamppb.New(sample.Timestamp),
+		Latitude:   sample.Latitude,
+		Longitude:  sample.Longitude,
+		Altitude:   sample.Altitude,
+		Speed:      sample.Speed,
+		Confidence: sample.Confidence,
 	}
 }
 

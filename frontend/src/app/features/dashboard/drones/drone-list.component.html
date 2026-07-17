@@ -1,0 +1,34 @@
+<section class="panel" aria-label="Tracked targets">
+  <header class="panel-header">
+    <h2>Tracked targets</h2>
+    <span class="count">{{ rows().length }}</span>
+  </header>
+  @if (rows().length > 0) {
+    <table class="targets">
+      <thead>
+        <tr>
+          <th scope="col">Target</th>
+          <th scope="col">Alt, m</th>
+          <th scope="col">Speed, m/s</th>
+          <th scope="col">Track</th>
+          <th scope="col">Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.DroneID) {
+          <tr>
+            <td>{{ row.DroneID }}</td>
+            <td>{{ row.Altitude | number: '1.0-0' }}</td>
+            <td>{{ row.Speed | number: '1.1-1' }}</td>
+            <td>
+              <span [class]="row.confidenceClass">{{ row.Confidence }}%</span>
+            </td>
+            <td>{{ row.Timestamp | date: 'HH:mm:ss' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="placeholder">No targets tracked</p>
+  }
+</section>

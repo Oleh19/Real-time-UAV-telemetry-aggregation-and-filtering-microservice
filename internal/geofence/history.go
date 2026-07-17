@@ -15,7 +15,10 @@ type HistoryRepository interface {
 	SaveHistoryBatch(ctx context.Context, samples []telemetry.Sample) error
 }
 
-const finalFlushTimeout = 5 * time.Second
+const (
+	finalFlushTimeout = 5 * time.Second
+	redeliveryDelay   = 5 * time.Second
+)
 
 type HistoryWriter struct {
 	repo   HistoryRepository

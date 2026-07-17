@@ -142,7 +142,7 @@ func TestIngestorRejectsInvalidSamples(t *testing.T) {
 		{name: "longitude out of range", sample: telemetry.Sample{DroneID: "d", Timestamp: now, Longitude: -300}},
 		{name: "latitude not a number", sample: telemetry.Sample{DroneID: "d", Timestamp: now, Latitude: math.NaN()}},
 		{name: "negative speed", sample: telemetry.Sample{DroneID: "d", Timestamp: now, Speed: -5}},
-		{name: "battery above maximum", sample: telemetry.Sample{DroneID: "d", Timestamp: now, BatteryPercentage: 150}},
+		{name: "confidence above maximum", sample: telemetry.Sample{DroneID: "d", Timestamp: now, Confidence: 150}},
 		{name: "timestamp in the future", sample: telemetry.Sample{DroneID: "d", Timestamp: now.Add(time.Hour)}},
 		{name: "timestamp too old", sample: telemetry.Sample{DroneID: "d", Timestamp: now.Add(-48 * time.Hour)}},
 	}

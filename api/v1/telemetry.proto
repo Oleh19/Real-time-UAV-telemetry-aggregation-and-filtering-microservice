@@ -13,7 +13,7 @@ message DroneTelemetry {
   double longitude = 4;
   double altitude = 5;
   float speed = 6;
-  int32 battery_percentage = 7;
+  int32 confidence = 7;
 }
 
 message ZoneBreach {

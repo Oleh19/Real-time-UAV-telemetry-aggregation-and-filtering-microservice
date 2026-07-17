@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vet, lint, unit tests, formatting
+        run: make check
+      - name: Integration tests (PostGIS + NATS)
+        run: make itest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: make web-install
+      - name: Lint
+        run: make web-lint
+      - name: Unit tests
+        run: make web-test
+      - name: Production build
+        run: make web-build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build all images
+        run: docker compose build

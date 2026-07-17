@@ -1,0 +1,190 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterNextRender,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import * as L from 'leaflet';
+
+import { DroneSample, ZoneFeatureCollection } from '../../../core/models/telemetry';
+import { TelemetryService } from '../../../core/telemetry.service';
+
+const MAP_CENTER: L.LatLngExpression = [48.7, 31.2];
+const MAP_ZOOM = 6;
+
+const calmZoneStyle: L.PathOptions = {
+  color: '#8b98a9',
+  weight: 1,
+  fillColor: '#8b98a9',
+  fillOpacity: 0.03,
+};
+
+const alarmedZoneStyle: L.PathOptions = {
+  color: '#d64545',
+  weight: 2,
+  fillColor: '#d64545',
+  fillOpacity: 0.25,
+};
+
+@Component({
+  selector: 'app-drone-map',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '<div class="map" #mapHost></div>',
+  styles: ':host { display: block; height: 100%; } .map { height: 100%; }',
+})
+export class DroneMapComponent {
+  private readonly telemetry = inject(TelemetryService);
+  private readonly mapHost = viewChild.required<ElementRef<HTMLDivElement>>('mapHost');
+
+  private readonly mapReady = signal(false);
+  private map?: L.Map;
+  private zonesLayer?: L.GeoJSON;
+  private readonly zoneLayersById = new Map<number, L.Path>();
+  private readonly markers = new Map<string, L.Marker>();
+  private readonly bearings = new Map<string, number>();
+  private readonly lastPositions = new Map<string, L.LatLng>();
+  private readonly iconKeys = new Map<string, string>();
+
+  constructor() {
+    afterNextRender(() => this.initMap());
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderZones(this.telemetry.zones());
+    });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.styleZones(this.telemetry.alarmedOblastIds());
+    });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderDrones(this.telemetry.drones());
+    });
+  }
+
+  private initMap(): void {
+    this.map = L.map(this.mapHost().nativeElement, { center: MAP_CENTER, zoom: MAP_ZOOM });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(this.map);
+    this.mapReady.set(true);
+  }
+
+  private renderZones(zones: ZoneFeatureCollection): void {
+    if (!this.map) {
+      return;
+    }
+    this.zonesLayer?.remove();
+    this.zoneLayersById.clear();
+    this.zonesLayer = L.geoJSON(zones, {
+      style: calmZoneStyle,
+      onEachFeature: (feature, layer) => {
+        layer.bindTooltip(String(feature.properties?.['name'] ?? 'oblast'));
+        if (typeof feature.properties?.['id'] === 'number' && layer instanceof L.Path) {
+          this.zoneLayersById.set(feature.properties['id'], layer);
+        }
+      },
+    }).addTo(this.map);
+    this.styleZones(this.telemetry.alarmedOblastIds());
+  }
+
+  private styleZones(alarmedIds: Set<number>): void {
+    for (const [id, layer] of this.zoneLayersById) {
+      layer.setStyle(alarmedIds.has(id) ? alarmedZoneStyle : calmZoneStyle);
+    }
+  }
+
+  private renderDrones(drones: DroneSample[]): void {
+    if (!this.map) {
+      return;
+    }
+    const seen = new Set<string>();
+    for (const drone of drones) {
+      seen.add(drone.DroneID);
+      const position = L.latLng(drone.Latitude, drone.Longitude);
+      const color = confidenceColor(drone.Confidence);
+      const bearing = this.updateBearing(drone.DroneID, position);
+      const iconKey = `${color}:${Math.round(bearing)}`;
+      const existing = this.markers.get(drone.DroneID);
+      if (existing) {
+        existing.setLatLng(position);
+        if (this.iconKeys.get(drone.DroneID) !== iconKey) {
+          existing.setIcon(droneIcon(color, bearing));
+          this.iconKeys.set(drone.DroneID, iconKey);
+        }
+        existing.setTooltipContent(tooltipFor(drone));
+        continue;
+      }
+      const marker = L.marker(position, { icon: droneIcon(color, bearing) }).bindTooltip(
+        tooltipFor(drone),
+      );
+      marker.addTo(this.map);
+      this.markers.set(drone.DroneID, marker);
+      this.iconKeys.set(drone.DroneID, iconKey);
+    }
+    for (const [id, marker] of this.markers) {
+      if (!seen.has(id)) {
+        marker.remove();
+        this.markers.delete(id);
+        this.bearings.delete(id);
+        this.lastPositions.delete(id);
+        this.iconKeys.delete(id);
+      }
+    }
+  }
+
+  private updateBearing(droneId: string, position: L.LatLng): number {
+    const previous = this.lastPositions.get(droneId);
+    this.lastPositions.set(droneId, position);
+    if (previous) {
+      const nextBearing = bearingDegrees(previous, position);
+      if (nextBearing !== null) {
+        this.bearings.set(droneId, nextBearing);
+        return nextBearing;
+      }
+    }
+    return this.bearings.get(droneId) ?? 0;
+  }
+}
+
+function droneIcon(color: string, bearing: number): L.DivIcon {
+  return L.divIcon({
+    className: 'drone-icon-wrap',
+    html: `<div class="drone-icon" style="transform: rotate(${Math.round(bearing)}deg); border-bottom-color: ${color}"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
+function bearingDegrees(from: L.LatLng, to: L.LatLng): number | null {
+  const deltaLat = to.lat - from.lat;
+  const deltaLon = (to.lng - from.lng) * Math.cos((to.lat * Math.PI) / 180);
+  if (deltaLat === 0 && deltaLon === 0) {
+    return null;
+  }
+  return (Math.atan2(deltaLon, deltaLat) * 180) / Math.PI;
+}
+
+function confidenceColor(level: number): string {
+  if (level > 70) {
+    return '#2f9e44';
+  }
+  if (level > 40) {
+    return '#e8890c';
+  }
+  return '#d64545';
+}
+
+function tooltipFor(drone: DroneSample): string {
+  return `${drone.DroneID} · ${Math.round(drone.Altitude)} m · track ${drone.Confidence}%`;
+}

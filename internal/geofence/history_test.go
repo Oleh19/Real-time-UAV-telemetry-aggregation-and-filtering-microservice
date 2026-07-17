@@ -22,7 +22,7 @@ func startHistoryWriter(t *testing.T, repo *fakeHistoryRepo, batchSize int, flus
 			t.Errorf("Run: %v", err)
 		}
 	}()
-	if !eventually(2*time.Second, consumer.handlerRegistered) {
+	if !eventually(consumer.handlerRegistered) {
 		t.Fatal("consumer handler was not registered")
 	}
 	return consumer, cancel, &wg
@@ -38,7 +38,7 @@ func TestHistoryWriterFlushesFullBatch(t *testing.T) {
 	consumer.push(first)
 	consumer.push(second)
 
-	if !eventually(2*time.Second, func() bool {
+	if !eventually(func() bool {
 		a1, _, _ := first.state()
 		a2, _, _ := second.state()
 		return a1 && a2
@@ -58,7 +58,7 @@ func TestHistoryWriterFlushesOnInterval(t *testing.T) {
 	msg := &fakeMsg{data: payloadAt("drone-001", time.Now())}
 	consumer.push(msg)
 
-	if !eventually(2*time.Second, func() bool { acked, _, _ := msg.state(); return acked }) {
+	if !eventually(func() bool { acked, _, _ := msg.state(); return acked }) {
 		t.Fatal("partial batch was not flushed by timer")
 	}
 }
@@ -71,7 +71,7 @@ func TestHistoryWriterTerminatesMalformedMessages(t *testing.T) {
 	msg := &fakeMsg{data: []byte{0xff, 0xff, 0xff}}
 	consumer.push(msg)
 
-	if !eventually(2*time.Second, func() bool { _, _, termed := msg.state(); return termed }) {
+	if !eventually(func() bool { _, _, termed := msg.state(); return termed }) {
 		t.Fatal("malformed message was not terminated")
 	}
 	if got := repo.batchCount(); got != 0 {
@@ -87,7 +87,7 @@ func TestHistoryWriterNaksBatchOnSaveFailure(t *testing.T) {
 	msg := &fakeMsg{data: payloadAt("drone-001", time.Now())}
 	consumer.push(msg)
 
-	if !eventually(2*time.Second, func() bool { _, naked, _ := msg.state(); return naked }) {
+	if !eventually(func() bool { _, naked, _ := msg.state(); return naked }) {
 		t.Fatal("message was not naked on save failure")
 	}
 }

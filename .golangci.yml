@@ -11,6 +11,11 @@ linters:
     - unused
     - gocritic
     - misspell
+    - errorlint
+    - unconvert
+    - unparam
+    - nolintlint
+    - copyloopvar
 
 issues:
   exclude-dirs:

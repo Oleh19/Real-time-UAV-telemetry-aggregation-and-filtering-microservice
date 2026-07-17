@@ -20,18 +20,18 @@ const (
 	MinAltitude    = -500.0
 	MaxAltitude    = 50000.0
 	MaxSpeed       = 500.0
-	MinBattery     = 0
-	MaxBattery     = 100
+	MinConfidence  = 0
+	MaxConfidence  = 100
 )
 
 type Sample struct {
-	DroneID           DroneID
-	Timestamp         time.Time
-	Latitude          float64
-	Longitude         float64
-	Altitude          float64
-	Speed             float32
-	BatteryPercentage int32
+	DroneID    DroneID
+	Timestamp  time.Time
+	Latitude   float64
+	Longitude  float64
+	Altitude   float64
+	Speed      float32
+	Confidence int32
 }
 
 func (s Sample) Validate() error {
@@ -50,8 +50,8 @@ func (s Sample) Validate() error {
 	if !inRange(float64(s.Speed), 0, MaxSpeed) {
 		return fmt.Errorf("speed %f out of range [0, %g]", s.Speed, MaxSpeed)
 	}
-	if s.BatteryPercentage < MinBattery || s.BatteryPercentage > MaxBattery {
-		return fmt.Errorf("battery percentage %d out of range [%d, %d]", s.BatteryPercentage, MinBattery, MaxBattery)
+	if s.Confidence < MinConfidence || s.Confidence > MaxConfidence {
+		return fmt.Errorf("confidence %d out of range [%d, %d]", s.Confidence, MinConfidence, MaxConfidence)
 	}
 	now := time.Now()
 	if s.Timestamp.After(now.Add(MaxFutureDrift)) {
@@ -67,12 +67,12 @@ func inRange(v, min, max float64) bool {
 	return v >= min && v <= max
 }
 
-type NoFlyZone struct {
+type Zone struct {
 	ID   ZoneID
 	Name string
 }
 
 type ZoneBreach struct {
-	Zone   NoFlyZone
+	Zone   Zone
 	Sample Sample
 }

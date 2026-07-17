@@ -37,7 +37,7 @@ func TestRunRetentionPrunesImmediately(t *testing.T) {
 		close(done)
 	}()
 
-	if !eventually(2*time.Second, func() bool { return pruner.count() > 0 }) {
+	if !eventually(func() bool { return pruner.count() > 0 }) {
 		t.Error("expected an immediate prune on startup")
 	}
 	cancel()

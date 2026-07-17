@@ -196,7 +196,7 @@ func clearGeofenceEnv(t *testing.T) {
 
 func clearSimulatorEnv(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"SERVER_ADDR", "DRONE_COUNT", "SEND_INTERVAL", "START_LATITUDE", "START_LONGITUDE"} {
+	for _, key := range []string{"SERVER_ADDR", "DRONE_COUNT", "SEND_INTERVAL"} {
 		t.Setenv(key, "")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -49,17 +50,18 @@ func run(logger *slog.Logger) error {
 
 	logger.Info("simulator starting",
 		"server_addr", cfg.ServerAddr,
-		"drone_count", cfg.DroneCount,
+		"max_concurrent_drones", cfg.DroneCount,
 		"send_interval", cfg.SendInterval.String(),
 	)
 
+	var droneIDs atomic.Int64
 	var wg sync.WaitGroup
-	for i := 0; i < cfg.DroneCount; i++ {
+	for slot := 0; slot < cfg.DroneCount; slot++ {
 		wg.Add(1)
-		go func(index int) {
+		go func(slot int) {
 			defer wg.Done()
-			flyWithRetry(ctx, client, cfg, index, logger)
-		}(i)
+			runDroneSlot(ctx, client, cfg, slot, &droneIDs, logger)
+		}(slot)
 	}
 	wg.Wait()
 
@@ -67,19 +69,24 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-func flyWithRetry(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, index int, logger *slog.Logger) {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(index)))
+func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(slot)))
 	for {
-		drone := simulator.NewDrone(index, cfg.StartLatitude, cfg.StartLongitude, rng)
-		err := drone.Fly(ctx, client, cfg.SendInterval, logger)
-		if err == nil || ctx.Err() != nil {
-			return
-		}
-		logger.Warn("drone stream failed, retrying", "drone_index", index, "error", err)
+		respawnDelay := time.Duration(2+rng.Intn(28)) * time.Second
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(2 * time.Second):
+		case <-time.After(respawnDelay):
+		}
+		drone := simulator.NewDrone(int(droneIDs.Add(1)), rng)
+		if err := drone.Fly(ctx, client, cfg.SendInterval, logger); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Warn("drone stream failed", "slot", slot, "error", err)
+		}
+		if ctx.Err() != nil {
+			return
 		}
 	}
 }

@@ -3,15 +3,14 @@ services:
     image: postgis/postgis:16-3.4
     environment:
       POSTGRES_USER: uav
-      POSTGRES_PASSWORD: uav
+      POSTGRES_PASSWORD: '${POSTGRES_PASSWORD:-uav}'
       POSTGRES_DB: uav
     volumes:
-      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - '5432:5432'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U uav -d uav"]
+      test: ['CMD-SHELL', 'pg_isready -U uav -d uav']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -19,68 +18,95 @@ services:
   nats:
     image: nats:2.10-alpine
     ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+      - '4222:4222'
+      - '8222:8222'
+    command: ['--jetstream', '--store_dir', '/data', '--http_port', '8222']
     volumes:
       - natsdata:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8222/healthz | grep -q ok"]
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:8222/healthz | grep -q ok']
       interval: 5s
       timeout: 3s
       retries: 10
 
   server:
     build: .
-    entrypoint: ["/usr/local/bin/server"]
+    entrypoint: ['/usr/local/bin/server']
     environment:
-      GRPC_ADDR: ":50051"
-      HTTP_ADDR: ":8080"
-      NATS_URL: "nats://nats:4222"
-      WORKER_COUNT: "8"
-      QUEUE_SIZE: "1024"
-      STATE_TTL: "5m"
+      GRPC_ADDR: ':50051'
+      HTTP_ADDR: ':8080'
+      NATS_URL: 'nats://nats:4222'
+      WORKER_COUNT: '8'
+      QUEUE_SIZE: '1024'
+      STATE_TTL: '30s'
     ports:
-      - "50051:50051"
-      - "8080:8080"
+      - '50051:50051'
+      - '8080:8080'
     depends_on:
       nats:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/server', '-healthcheck']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     stop_grace_period: 15s
     restart: on-failure
 
   geofence:
     build: .
-    entrypoint: ["/usr/local/bin/geofence"]
+    entrypoint: ['/usr/local/bin/geofence']
     environment:
-      NATS_URL: "nats://nats:4222"
-      POSTGRES_DSN: "postgres://uav:uav@postgres:5432/uav"
-      HTTP_ADDR: ":8081"
-      WORKER_COUNT: "8"
-      QUEUE_SIZE: "256"
-      HISTORY_RETENTION: "24h"
-      BATCH_SIZE: "100"
-      FLUSH_INTERVAL: "1s"
+      NATS_URL: 'nats://nats:4222'
+      POSTGRES_DSN: 'postgres://uav:${POSTGRES_PASSWORD:-uav}@postgres:5432/uav'
+      HTTP_ADDR: ':8081'
+      WORKER_COUNT: '8'
+      QUEUE_SIZE: '256'
+      HISTORY_RETENTION: '24h'
+      BATCH_SIZE: '100'
+      FLUSH_INTERVAL: '1s'
     ports:
-      - "8081:8081"
+      - '8081:8081'
     depends_on:
       nats:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/geofence', '-healthcheck']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: on-failure
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '4200:80'
+    depends_on:
+      server:
+        condition: service_healthy
+      geofence:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: on-failure
 
   simulator:
     build: .
-    entrypoint: ["/usr/local/bin/simulator"]
+    entrypoint: ['/usr/local/bin/simulator']
     environment:
-      SERVER_ADDR: "server:50051"
-      DRONE_COUNT: "5"
-      SEND_INTERVAL: "500ms"
-      START_LATITUDE: "50.45"
-      START_LONGITUDE: "30.52"
+      SERVER_ADDR: 'server:50051'
+      DRONE_COUNT: '${DRONE_COUNT:-10}'
+      SEND_INTERVAL: '${SEND_INTERVAL:-500ms}'
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     restart: on-failure
 
 volumes:
