@@ -24,6 +24,8 @@ import (
 	"uavmonitor/internal/usecase"
 )
 
+const maxIngestMessageBytes = 64 * 1024
+
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe the local health endpoint and exit")
 	flag.Parse()
@@ -63,7 +65,12 @@ func run(logger *slog.Logger) error {
 	defer cancelWorkers()
 	ingestor.Start(workerCtx, cfg.WorkerCount)
 
+	if cfg.IngestToken == "" {
+		logger.Warn("ingest authentication disabled: set INGEST_TOKEN to require a token")
+	}
 	grpcServer := grpc.NewServer(
+		grpc.StreamInterceptor(grpcdelivery.StreamAuthInterceptor(cfg.IngestToken)),
+		grpc.MaxRecvMsgSize(maxIngestMessageBytes),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
@@ -85,6 +92,7 @@ func run(logger *slog.Logger) error {
 		Addr:              cfg.HTTPAddr,
 		Handler:           observabilityHandler(ingestor, publisher, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	errCh := make(chan error, 2)

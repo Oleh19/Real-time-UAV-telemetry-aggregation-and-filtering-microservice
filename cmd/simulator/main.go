@@ -36,7 +36,11 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	conn, err := grpc.NewClient(cfg.ServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if cfg.IngestToken != "" {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(ingestToken(cfg.IngestToken)))
+	}
+	conn, err := grpc.NewClient(cfg.ServerAddr, dialOpts...)
 	if err != nil {
 		return err
 	}
@@ -68,6 +72,14 @@ func run(logger *slog.Logger) error {
 	logger.Info("simulator stopped")
 	return nil
 }
+
+type ingestToken string
+
+func (t ingestToken) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer " + string(t)}, nil
+}
+
+func (ingestToken) RequireTransportSecurity() bool { return false }
 
 func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(slot)))

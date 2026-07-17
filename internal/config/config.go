@@ -14,12 +14,14 @@ type Server struct {
 	WorkerCount int
 	QueueSize   int
 	StateTTL    time.Duration
+	IngestToken string
 }
 
 type Simulator struct {
 	ServerAddr   string
 	DroneCount   int
 	SendInterval time.Duration
+	IngestToken  string
 }
 
 type Geofence struct {
@@ -53,6 +55,7 @@ func LoadServer() (Server, error) {
 		WorkerCount: workerCount,
 		QueueSize:   queueSize,
 		StateTTL:    stateTTL,
+		IngestToken: env.String("INGEST_TOKEN", ""),
 	}
 	if cfg.WorkerCount < 1 {
 		return Server{}, fmt.Errorf("validate WORKER_COUNT: must be >= 1, got %d", cfg.WorkerCount)
@@ -79,6 +82,7 @@ func LoadSimulator() (Simulator, error) {
 		ServerAddr:   env.String("SERVER_ADDR", "localhost:50051"),
 		DroneCount:   droneCount,
 		SendInterval: sendInterval,
+		IngestToken:  env.String("INGEST_TOKEN", ""),
 	}
 	if cfg.DroneCount < 1 {
 		return Simulator{}, fmt.Errorf("validate DRONE_COUNT: must be >= 1, got %d", cfg.DroneCount)

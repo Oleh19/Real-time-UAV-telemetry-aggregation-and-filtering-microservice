@@ -15,6 +15,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 ## Features
 
 - **Streaming ingest** — the detection network pushes target track reports over gRPC client streams; a worker pool with a bounded queue applies backpressure and consciously drops overflow instead of falling over.
+- **Authenticated & hardened** — bearer-token auth on the ingest path, gRPC message-size limits, distroless read-only containers with dropped capabilities, and nginx security headers + rate limiting (see [Security](#security)).
 - **Validation and filtering** — coordinate ranges, track confidence bounds, and timestamp drift are checked on every sample; invalid samples are rejected and counted without killing the stream.
 - **Durable pipeline** — samples flow through a NATS JetStream stream with durable consumers: if the geofence worker is down, telemetry waits in the stream and is processed after restart, with zero loss.
 - **Oblast air-alert system** — real boundaries of all 27 Ukrainian regions (geoBoundaries data) with a 10 km alert buffer around each one, seeded into PostGIS on first start; `ST_Intersects` checks on every position raise an alarm for the oblast once per entry (no per-sample spam), publish a `ZoneBreach` event to `drone.alerts`, and track exits; an oblast stays alarmed while at least one drone is inside its buffer.
@@ -76,25 +77,27 @@ The code and wire protocol use **drone** as the domain term (the physical object
 
 All services are configured via environment variables (see `docker-compose.yml`):
 
-| Service   | Variable            | Default                                 |
-| --------- | ------------------- | --------------------------------------- |
-| server    | `GRPC_ADDR`         | `:50051`                                |
-| server    | `HTTP_ADDR`         | `:8080`                                 |
-| server    | `NATS_URL`          | `nats://localhost:4222`                 |
-| server    | `WORKER_COUNT`      | `8`                                     |
-| server    | `QUEUE_SIZE`        | `1024`                                  |
-| server    | `STATE_TTL`         | `5m` (`30s` in compose)                 |
-| simulator | `SERVER_ADDR`       | `localhost:50051`                       |
-| simulator | `DRONE_COUNT`       | `5` (`10` in compose)                   |
-| simulator | `SEND_INTERVAL`     | `500ms`                                 |
-| geofence  | `POSTGRES_DSN`      | `postgres://uav:uav@localhost:5432/uav` |
-| postgres  | `POSTGRES_PASSWORD` | `uav` (override via `.env`)             |
-| geofence  | `HTTP_ADDR`         | `:8081`                                 |
-| geofence  | `WORKER_COUNT`      | `8`                                     |
-| geofence  | `QUEUE_SIZE`        | `256`                                   |
-| geofence  | `HISTORY_RETENTION` | `24h`                                   |
-| geofence  | `BATCH_SIZE`        | `100`                                   |
-| geofence  | `FLUSH_INTERVAL`    | `1s`                                    |
+| Service   | Variable            | Default                                              |
+| --------- | ------------------- | ---------------------------------------------------- |
+| server    | `GRPC_ADDR`         | `:50051`                                             |
+| server    | `HTTP_ADDR`         | `:8080`                                              |
+| server    | `NATS_URL`          | `nats://localhost:4222`                              |
+| server    | `WORKER_COUNT`      | `8`                                                  |
+| server    | `QUEUE_SIZE`        | `1024`                                               |
+| server    | `STATE_TTL`         | `5m` (`30s` in compose)                              |
+| server    | `INGEST_TOKEN`      | _(empty = auth off)_ (`dev-ingest-token` in compose) |
+| simulator | `SERVER_ADDR`       | `localhost:50051`                                    |
+| simulator | `INGEST_TOKEN`      | _(empty)_ (`dev-ingest-token` in compose)            |
+| simulator | `DRONE_COUNT`       | `5` (`10` in compose)                                |
+| simulator | `SEND_INTERVAL`     | `500ms`                                              |
+| geofence  | `POSTGRES_DSN`      | `postgres://uav:uav@localhost:5432/uav`              |
+| postgres  | `POSTGRES_PASSWORD` | `uav` (override via `.env`)                          |
+| geofence  | `HTTP_ADDR`         | `:8081`                                              |
+| geofence  | `WORKER_COUNT`      | `8`                                                  |
+| geofence  | `QUEUE_SIZE`        | `256`                                                |
+| geofence  | `HISTORY_RETENTION` | `24h`                                                |
+| geofence  | `BATCH_SIZE`        | `100`                                                |
+| geofence  | `FLUSH_INTERVAL`    | `1s`                                                 |
 
 ## Development (everything runs in Docker)
 
@@ -138,11 +141,19 @@ frontend/             Angular dashboard (Leaflet map, alerts, targets table) + n
 .github/workflows/    CI (backend check + integration, frontend, docker build)
 ```
 
+## Security
+
+- **Authenticated ingest** — `StreamTelemetry` is guarded by a bearer-token gRPC interceptor (constant-time comparison). The server rejects unauthenticated streams with `Unauthenticated` when `INGEST_TOKEN` is set; compose wires a shared dev token to server and simulator so local runs work out of the box. Override it via `.env` and never ship the default.
+- **Message-size limit** — gRPC `MaxRecvMsgSize` caps ingest messages (64 KiB) as a DoS guard, alongside `MaxConcurrentStreams` and keepalive enforcement.
+- **Hardened containers** — the Go services run distroless as non-root with `read_only` root filesystems, `cap_drop: ALL`, and `no-new-privileges`; every service sets `no-new-privileges`.
+- **nginx** — security headers on every response (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`), version banner disabled, and per-IP rate limiting on the JSON API.
+- **Secrets** — the database password and ingest token come from the environment (`.env`), with local-friendly defaults; production supplies real values.
+
 ## Production readiness
 
-This is a portfolio-grade project that runs and self-verifies locally with one command. What is in place: durable delivery, schema migrations, healthchecks, integration tests, CI, and graceful shutdown. Deliberately **out of scope** for a local-first demo (and easy to add when a real deployment target exists):
+This is a portfolio-grade project that runs and self-verifies locally with one command. What is in place: authenticated ingest, hardened containers, durable delivery, schema migrations, healthchecks, integration tests, CI, and graceful shutdown. Deliberately **out of scope** for a local-first demo (and easy to add when a real deployment target exists):
 
-- **Transport security** — gRPC ingest and HTTP endpoints are unauthenticated and unencrypted; production would add mTLS on ingest and put secrets in a real secret store rather than `.env` defaults.
+- **Transport encryption** — traffic between containers on the private Docker network is plaintext; a real deployment would terminate TLS (and ideally mTLS) on the gRPC ingest path. The auth interceptor and per-RPC credentials are already in place, so enabling TLS is a transport-credentials swap, not an app change.
 - **Horizontal scale** — the last-state cache and per-oblast alarm state live in process memory, so the aggregation server and geofence worker run as single instances; scaling out would require sharding telemetry by drone id or moving that state to a shared store (e.g. Redis).
 - **Metrics stack** — metrics are exposed as JSON/SSE; a production setup would add a Prometheus exposition endpoint, scraper, dashboards, and alerting on `dropped`/`failed`.
 - **History at scale** — `telemetry_history` retention is a periodic `DELETE`; at hundreds of millions of rows this should become time-based partitioning (drop-partition retention).

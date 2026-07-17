@@ -53,6 +53,7 @@ func run(logger *slog.Logger) error {
 		Addr:              cfg.HTTPAddr,
 		Handler:           newHTTPHandler(deps, logger),
 		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	go func() {
 		logger.Info("http observability server listening", "addr", cfg.HTTPAddr)
