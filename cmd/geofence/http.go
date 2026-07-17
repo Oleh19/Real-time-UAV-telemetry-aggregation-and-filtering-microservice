@@ -39,7 +39,7 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 			logger.Error("encode oblast alerts", "error", err)
 		}
 	})
-	mux.HandleFunc("GET /events", sse.Handler(eventsInterval, func(context.Context) any {
+	mux.HandleFunc("GET /events", sse.Handler(sse.DefaultInterval, func(context.Context) any {
 		return alertsSnapshot(deps)
 	}, logger))
 	mux.HandleFunc("GET /zones", zonesHandler(deps.repo, logger))

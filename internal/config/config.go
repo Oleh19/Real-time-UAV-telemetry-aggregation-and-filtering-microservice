@@ -2,9 +2,9 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"time"
+
+	"uavmonitor/internal/env"
 )
 
 type Server struct {
@@ -34,22 +34,22 @@ type Geofence struct {
 }
 
 func LoadServer() (Server, error) {
-	workerCount, err := intEnv("WORKER_COUNT", 8)
+	workerCount, err := env.Int("WORKER_COUNT", 8)
 	if err != nil {
 		return Server{}, err
 	}
-	queueSize, err := intEnv("QUEUE_SIZE", 1024)
+	queueSize, err := env.Int("QUEUE_SIZE", 1024)
 	if err != nil {
 		return Server{}, err
 	}
-	stateTTL, err := durationEnv("STATE_TTL", 5*time.Minute)
+	stateTTL, err := env.Duration("STATE_TTL", 5*time.Minute)
 	if err != nil {
 		return Server{}, err
 	}
 	cfg := Server{
-		GRPCAddr:    strEnv("GRPC_ADDR", ":50051"),
-		HTTPAddr:    strEnv("HTTP_ADDR", ":8080"),
-		NATSURL:     strEnv("NATS_URL", "nats://localhost:4222"),
+		GRPCAddr:    env.String("GRPC_ADDR", ":50051"),
+		HTTPAddr:    env.String("HTTP_ADDR", ":8080"),
+		NATSURL:     env.String("NATS_URL", "nats://localhost:4222"),
 		WorkerCount: workerCount,
 		QueueSize:   queueSize,
 		StateTTL:    stateTTL,
@@ -67,16 +67,16 @@ func LoadServer() (Server, error) {
 }
 
 func LoadSimulator() (Simulator, error) {
-	droneCount, err := intEnv("DRONE_COUNT", 5)
+	droneCount, err := env.Int("DRONE_COUNT", 5)
 	if err != nil {
 		return Simulator{}, err
 	}
-	sendInterval, err := durationEnv("SEND_INTERVAL", 500*time.Millisecond)
+	sendInterval, err := env.Duration("SEND_INTERVAL", 500*time.Millisecond)
 	if err != nil {
 		return Simulator{}, err
 	}
 	cfg := Simulator{
-		ServerAddr:   strEnv("SERVER_ADDR", "localhost:50051"),
+		ServerAddr:   env.String("SERVER_ADDR", "localhost:50051"),
 		DroneCount:   droneCount,
 		SendInterval: sendInterval,
 	}
@@ -90,30 +90,30 @@ func LoadSimulator() (Simulator, error) {
 }
 
 func LoadGeofence() (Geofence, error) {
-	workerCount, err := intEnv("WORKER_COUNT", 8)
+	workerCount, err := env.Int("WORKER_COUNT", 8)
 	if err != nil {
 		return Geofence{}, err
 	}
-	queueSize, err := intEnv("QUEUE_SIZE", 256)
+	queueSize, err := env.Int("QUEUE_SIZE", 256)
 	if err != nil {
 		return Geofence{}, err
 	}
-	historyRetention, err := durationEnv("HISTORY_RETENTION", 24*time.Hour)
+	historyRetention, err := env.Duration("HISTORY_RETENTION", 24*time.Hour)
 	if err != nil {
 		return Geofence{}, err
 	}
-	batchSize, err := intEnv("BATCH_SIZE", 100)
+	batchSize, err := env.Int("BATCH_SIZE", 100)
 	if err != nil {
 		return Geofence{}, err
 	}
-	flushInterval, err := durationEnv("FLUSH_INTERVAL", time.Second)
+	flushInterval, err := env.Duration("FLUSH_INTERVAL", time.Second)
 	if err != nil {
 		return Geofence{}, err
 	}
 	cfg := Geofence{
-		NATSURL:          strEnv("NATS_URL", "nats://localhost:4222"),
-		PostgresDSN:      strEnv("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
-		HTTPAddr:         strEnv("HTTP_ADDR", ":8081"),
+		NATSURL:          env.String("NATS_URL", "nats://localhost:4222"),
+		PostgresDSN:      env.String("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
+		HTTPAddr:         env.String("HTTP_ADDR", ":8081"),
 		WorkerCount:      workerCount,
 		QueueSize:        queueSize,
 		HistoryRetention: historyRetention,
@@ -136,35 +136,4 @@ func LoadGeofence() (Geofence, error) {
 		return Geofence{}, fmt.Errorf("validate FLUSH_INTERVAL: must be >= 100ms, got %s", cfg.FlushInterval)
 	}
 	return cfg, nil
-}
-
-func strEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return fallback
-}
-
-func intEnv(key string, fallback int) (int, error) {
-	v, ok := os.LookupEnv(key)
-	if !ok || v == "" {
-		return fallback, nil
-	}
-	parsed, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("parse %s: %w", key, err)
-	}
-	return parsed, nil
-}
-
-func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
-	v, ok := os.LookupEnv(key)
-	if !ok || v == "" {
-		return fallback, nil
-	}
-	parsed, err := time.ParseDuration(v)
-	if err != nil {
-		return 0, fmt.Errorf("parse %s: %w", key, err)
-	}
-	return parsed, nil
 }

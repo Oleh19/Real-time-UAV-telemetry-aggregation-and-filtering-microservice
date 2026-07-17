@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"log/slog"
@@ -13,27 +12,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"uavmonitor/gen/telemetryv1"
 	"uavmonitor/internal/config"
 	grpcdelivery "uavmonitor/internal/delivery/grpc"
+	"uavmonitor/internal/env"
 	"uavmonitor/internal/health"
 	"uavmonitor/internal/queue/natspub"
-	"uavmonitor/internal/sse"
-	"uavmonitor/internal/telemetry"
 	"uavmonitor/internal/usecase"
 )
-
-const eventsInterval = 500 * time.Millisecond
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe the local health endpoint and exit")
 	flag.Parse()
 	if *healthcheck {
-		os.Exit(health.Probe(strEnv("HTTP_ADDR", ":8080")))
+		os.Exit(health.Probe(env.String("HTTP_ADDR", ":8080")))
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -41,13 +36,6 @@ func main() {
 		logger.Error("server stopped with error", "error", err)
 		os.Exit(1)
 	}
-}
-
-func strEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return fallback
 }
 
 func run(logger *slog.Logger) error {
@@ -151,47 +139,4 @@ func run(logger *slog.Logger) error {
 		"rejected", stats.Rejected,
 	)
 	return nil
-}
-
-func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		if natsConn.Status() != nats.CONNECTED {
-			http.Error(w, "nats unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, metricsSnapshot(ingestor, publisher))
-	})
-	mux.HandleFunc("GET /drones", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, ingestor.Snapshot())
-	})
-	mux.HandleFunc("GET /events", sse.Handler(eventsInterval, func(context.Context) any {
-		return telemetryEvent{
-			Drones: ingestor.Snapshot(),
-			Stats:  metricsSnapshot(ingestor, publisher),
-		}
-	}, logger))
-	return mux
-}
-
-type telemetryEvent struct {
-	Drones []telemetry.Sample `json:"drones"`
-	Stats  usecase.Stats      `json:"stats"`
-}
-
-func metricsSnapshot(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher) usecase.Stats {
-	stats := ingestor.Stats()
-	stats.Failed += publisher.Failed()
-	return stats
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }

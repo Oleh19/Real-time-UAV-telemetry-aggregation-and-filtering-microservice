@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const DefaultInterval = 500 * time.Millisecond
+
 type SnapshotFunc func(ctx context.Context) any
 
 func Handler(interval time.Duration, snapshot SnapshotFunc, logger *slog.Logger) http.HandlerFunc {

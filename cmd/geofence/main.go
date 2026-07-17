@@ -12,17 +12,16 @@ import (
 	"time"
 
 	"uavmonitor/internal/config"
+	"uavmonitor/internal/env"
 	"uavmonitor/internal/geofence"
 	"uavmonitor/internal/health"
 )
-
-const eventsInterval = 500 * time.Millisecond
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe the local health endpoint and exit")
 	flag.Parse()
 	if *healthcheck {
-		os.Exit(health.Probe(strEnv("HTTP_ADDR", ":8081")))
+		os.Exit(health.Probe(env.String("HTTP_ADDR", ":8081")))
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -30,13 +29,6 @@ func main() {
 		logger.Error("geofence worker stopped with error", "error", err)
 		os.Exit(1)
 	}
-}
-
-func strEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return fallback
 }
 
 func run(logger *slog.Logger) error {
