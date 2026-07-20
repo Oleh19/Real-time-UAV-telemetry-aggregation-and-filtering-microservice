@@ -1,0 +1,23 @@
+<section class="panel" aria-label="Detected swarms">
+  <header class="panel-header">
+    <h2>Swarms</h2>
+    <span class="swarm-count" [class.swarm-count-active]="feed.swarms().length > 0">
+      {{ feed.swarms().length }}
+    </span>
+  </header>
+  @if (feed.swarms().length > 0) {
+    <ul class="swarms">
+      @for (swarm of feed.swarms(); track swarm.id) {
+        <li class="swarm">
+          <div class="swarm-title">
+            <span class="swarm-id">{{ swarm.id }}</span>
+            <span class="swarm-size">{{ swarm.droneIds.length }} targets</span>
+          </div>
+          <span class="swarm-members">{{ swarm.droneIds.join(', ') }}</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">No compact target groups detected</p>
+  }
+</section>

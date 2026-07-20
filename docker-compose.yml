@@ -79,6 +79,8 @@ services:
       HISTORY_RETENTION: '24h'
       BATCH_SIZE: '100'
       FLUSH_INTERVAL: '1s'
+      SWARM_RADIUS_METERS: '${SWARM_RADIUS_METERS:-5000}'
+      SWARM_MIN_SIZE: '${SWARM_MIN_SIZE:-3}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
     ports:
       - '8081:8081'

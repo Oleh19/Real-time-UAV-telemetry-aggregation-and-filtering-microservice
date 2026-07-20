@@ -45,6 +45,12 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /zones", zonesHandler(deps.repo, logger))
 	mux.HandleFunc("GET /history", historyHandler(deps.repo, logger))
 	mux.HandleFunc("GET /breaches", breachesHandler(deps.repo, logger))
+	mux.HandleFunc("GET /swarms", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(deps.swarmDetector.Snapshot()); err != nil {
+			logger.Error("encode swarms", "error", err)
+		}
+	})
 	mux.HandleFunc("GET /custom-zones", listCustomZonesHandler(deps, logger))
 	mux.HandleFunc("POST /custom-zones", createCustomZoneHandler(deps, logger))
 	mux.HandleFunc("DELETE /custom-zones/{id}", deleteCustomZoneHandler(deps, logger))

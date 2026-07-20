@@ -87,7 +87,7 @@ func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence) 
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	go func() {
 		errCh <- deps.historyWriter.Run(runCtx, deps.historyConsumer, cfg.BatchSize, cfg.FlushInterval)
 	}()
@@ -97,9 +97,12 @@ func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence) 
 	go func() {
 		errCh <- deps.breachJournal.Run(runCtx, deps.breachConsumer)
 	}()
+	go func() {
+		errCh <- deps.swarmDetector.Run(runCtx, deps.swarmConsumer)
+	}()
 
 	var runErr error
-	for n := 0; n < 3; n++ {
+	for n := 0; n < 4; n++ {
 		if err := <-errCh; err != nil && runErr == nil {
 			runErr = err
 			cancelRun()

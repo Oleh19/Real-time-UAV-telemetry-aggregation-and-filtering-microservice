@@ -6,6 +6,7 @@ import { PlaybackPanelComponent } from './history/playback-panel.component';
 import { DroneMapComponent } from './map/drone-map.component';
 import { MetricsPanelComponent } from './metrics/metrics-panel.component';
 import { OblastPanelComponent } from './oblasts/oblast-panel.component';
+import { SwarmPanelComponent } from './swarms/swarm-panel.component';
 import { ZonePanelComponent } from './zones/zone-panel.component';
 
 @Component({
@@ -19,6 +20,7 @@ import { ZonePanelComponent } from './zones/zone-panel.component';
     PlaybackPanelComponent,
     BreachFeedComponent,
     ZonePanelComponent,
+    SwarmPanelComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',

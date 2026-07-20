@@ -25,9 +25,11 @@ type dependencies struct {
 	oblasts         []telemetry.Zone
 	historyWriter   *geofence.HistoryWriter
 	breachJournal   *geofence.BreachJournal
+	swarmDetector   *geofence.SwarmDetector
 	historyConsumer jetstream.Consumer
 	zonesConsumer   jetstream.Consumer
 	breachConsumer  jetstream.Consumer
+	swarmConsumer   jetstream.Consumer
 }
 
 func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logger) (*dependencies, func(), error) {
@@ -75,6 +77,11 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		cleanup()
 		return nil, nil, err
 	}
+	swarmConsumer, err := newConsumer(ctx, js, "geofence-swarms", natspub.SubjectTelemetry)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 
 	repo := postgres.NewRepository(pool)
 
@@ -107,6 +114,11 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 	checker := geofence.NewZoneChecker(zoneIndex, natspub.NewPublisher(js), logger)
 	historyWriter := geofence.NewHistoryWriter(repo, logger)
 	breachJournal := geofence.NewBreachJournal(repo, logger)
+	swarmDetector := geofence.NewSwarmDetector(geofence.SwarmConfig{
+		RadiusMeters: float64(cfg.SwarmRadiusM),
+		MinSize:      cfg.SwarmMinSize,
+		EvalInterval: cfg.SwarmEvalInterval,
+	}, logger)
 
 	return &dependencies{
 		pool:            pool,
@@ -117,9 +129,11 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		oblasts:         oblasts,
 		historyWriter:   historyWriter,
 		breachJournal:   breachJournal,
+		swarmDetector:   swarmDetector,
 		historyConsumer: historyConsumer,
 		zonesConsumer:   zonesConsumer,
 		breachConsumer:  breachConsumer,
+		swarmConsumer:   swarmConsumer,
 	}, cleanup, nil
 }
 

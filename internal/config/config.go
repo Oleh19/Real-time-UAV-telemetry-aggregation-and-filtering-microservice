@@ -27,14 +27,17 @@ type Simulator struct {
 }
 
 type Geofence struct {
-	NATSURL          string
-	PostgresDSN      string
-	HTTPAddr         string
-	WorkerCount      int
-	QueueSize        int
-	HistoryRetention time.Duration
-	BatchSize        int
-	FlushInterval    time.Duration
+	NATSURL           string
+	PostgresDSN       string
+	HTTPAddr          string
+	WorkerCount       int
+	QueueSize         int
+	HistoryRetention  time.Duration
+	BatchSize         int
+	FlushInterval     time.Duration
+	SwarmRadiusM      int
+	SwarmMinSize      int
+	SwarmEvalInterval time.Duration
 }
 
 func LoadServer() (Server, error) {
@@ -132,15 +135,30 @@ func LoadGeofence() (Geofence, error) {
 	if err != nil {
 		return Geofence{}, err
 	}
+	swarmRadius, err := env.Int("SWARM_RADIUS_METERS", 5000)
+	if err != nil {
+		return Geofence{}, err
+	}
+	swarmMinSize, err := env.Int("SWARM_MIN_SIZE", 3)
+	if err != nil {
+		return Geofence{}, err
+	}
+	swarmEvalInterval, err := env.Duration("SWARM_EVAL_INTERVAL", 5*time.Second)
+	if err != nil {
+		return Geofence{}, err
+	}
 	cfg := Geofence{
-		NATSURL:          env.String("NATS_URL", "nats://localhost:4222"),
-		PostgresDSN:      env.String("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
-		HTTPAddr:         env.String("HTTP_ADDR", ":8081"),
-		WorkerCount:      workerCount,
-		QueueSize:        queueSize,
-		HistoryRetention: historyRetention,
-		BatchSize:        batchSize,
-		FlushInterval:    flushInterval,
+		NATSURL:           env.String("NATS_URL", "nats://localhost:4222"),
+		PostgresDSN:       env.String("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
+		HTTPAddr:          env.String("HTTP_ADDR", ":8081"),
+		WorkerCount:       workerCount,
+		QueueSize:         queueSize,
+		HistoryRetention:  historyRetention,
+		BatchSize:         batchSize,
+		FlushInterval:     flushInterval,
+		SwarmRadiusM:      swarmRadius,
+		SwarmMinSize:      swarmMinSize,
+		SwarmEvalInterval: swarmEvalInterval,
 	}
 	if cfg.WorkerCount < 1 {
 		return Geofence{}, fmt.Errorf("validate WORKER_COUNT: must be >= 1, got %d", cfg.WorkerCount)
@@ -156,6 +174,15 @@ func LoadGeofence() (Geofence, error) {
 	}
 	if cfg.FlushInterval < 100*time.Millisecond {
 		return Geofence{}, fmt.Errorf("validate FLUSH_INTERVAL: must be >= 100ms, got %s", cfg.FlushInterval)
+	}
+	if cfg.SwarmRadiusM < 100 {
+		return Geofence{}, fmt.Errorf("validate SWARM_RADIUS_METERS: must be >= 100, got %d", cfg.SwarmRadiusM)
+	}
+	if cfg.SwarmMinSize < 2 {
+		return Geofence{}, fmt.Errorf("validate SWARM_MIN_SIZE: must be >= 2, got %d", cfg.SwarmMinSize)
+	}
+	if cfg.SwarmEvalInterval < time.Second {
+		return Geofence{}, fmt.Errorf("validate SWARM_EVAL_INTERVAL: must be >= 1s, got %s", cfg.SwarmEvalInterval)
 	}
 	return cfg, nil
 }

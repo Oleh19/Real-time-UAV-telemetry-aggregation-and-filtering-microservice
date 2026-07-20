@@ -24,6 +24,10 @@ func newMetricsHandler(deps *dependencies) http.Handler {
 		deps.historyWriter.WrittenTotal)
 	registerGauge(registry, "uav_alarmed_zones", "Alert zones with at least one drone inside.",
 		func() int64 { return int64(len(deps.checker.ActiveAlarms())) })
+	registerGauge(registry, "uav_active_swarms", "Compact target groups currently tracked as swarms.",
+		func() int64 { return int64(deps.swarmDetector.ActiveSwarms()) })
+	registerCounter(registry, "uav_swarms_detected_total", "Swarm formations detected since start.",
+		deps.swarmDetector.DetectedTotal)
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 
