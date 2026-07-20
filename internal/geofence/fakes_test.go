@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -62,6 +63,10 @@ type fakeMsg struct {
 
 func (m *fakeMsg) Data() []byte {
 	return m.data
+}
+
+func (m *fakeMsg) Headers() nats.Header {
+	return nil
 }
 
 func (m *fakeMsg) Ack() error {

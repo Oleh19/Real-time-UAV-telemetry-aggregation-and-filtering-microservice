@@ -9,6 +9,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -22,6 +25,21 @@ const (
 	SubjectAlerts    = "drone.alerts"
 	streamMaxAge     = 24 * time.Hour
 )
+
+var tracer = otel.Tracer("uavmonitor/natspub")
+
+func newTracedMsg(ctx context.Context, subject string, payload []byte) (*nats.Msg, trace.Span) {
+	ctx, span := tracer.Start(ctx, "publish "+subject,
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "nats"),
+			attribute.String("messaging.destination.name", subject),
+		),
+	)
+	msg := &nats.Msg{Subject: subject, Data: payload, Header: nats.Header{}}
+	InjectTraceContext(ctx, msg.Header)
+	return msg, span
+}
 
 func NewJetStream(ctx context.Context, conn *nats.Conn) (jetstream.JetStream, error) {
 	js, err := jetstream.New(conn)
@@ -72,12 +90,15 @@ func NewAsyncPublisher(ctx context.Context, conn *nats.Conn, logger *slog.Logger
 	return publisher, nil
 }
 
-func (p *AsyncPublisher) Publish(_ context.Context, sample telemetry.Sample) error {
+func (p *AsyncPublisher) Publish(ctx context.Context, sample telemetry.Sample) error {
 	payload, err := proto.Marshal(toProto(sample))
 	if err != nil {
 		return fmt.Errorf("marshal telemetry: %w", err)
 	}
-	if _, err := p.js.PublishAsync(SubjectTelemetry, payload); err != nil {
+	msg, span := newTracedMsg(ctx, SubjectTelemetry, payload)
+	defer span.End()
+	if _, err := p.js.PublishMsgAsync(msg); err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("publish to %s: %w", SubjectTelemetry, err)
 	}
 	return nil
@@ -136,7 +157,10 @@ func (p *Publisher) Publish(ctx context.Context, sample telemetry.Sample) error 
 	if err != nil {
 		return fmt.Errorf("marshal telemetry: %w", err)
 	}
-	if _, err := p.js.Publish(ctx, SubjectTelemetry, payload); err != nil {
+	msg, span := newTracedMsg(ctx, SubjectTelemetry, payload)
+	defer span.End()
+	if _, err := p.js.PublishMsg(ctx, msg); err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("publish to %s: %w", SubjectTelemetry, err)
 	}
 	return nil
@@ -147,7 +171,10 @@ func (p *Publisher) PublishAlert(ctx context.Context, breach telemetry.ZoneBreac
 	if err != nil {
 		return fmt.Errorf("marshal alert: %w", err)
 	}
-	if _, err := p.js.Publish(ctx, SubjectAlerts, payload); err != nil {
+	msg, span := newTracedMsg(ctx, SubjectAlerts, payload)
+	defer span.End()
+	if _, err := p.js.PublishMsg(ctx, msg); err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("publish to %s: %w", SubjectAlerts, err)
 	}
 	return nil

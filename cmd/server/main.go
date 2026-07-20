@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
@@ -21,6 +22,7 @@ import (
 	"uavmonitor/internal/env"
 	"uavmonitor/internal/health"
 	"uavmonitor/internal/queue/natspub"
+	"uavmonitor/internal/tracing"
 	"uavmonitor/internal/usecase"
 )
 
@@ -49,6 +51,12 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	stopTracing, err := tracing.Setup(ctx, "uav-server", env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
+	if err != nil {
+		return err
+	}
+	defer stopTracing()
+
 	natsConn, err := natspub.Connect(cfg.NATSURL, logger)
 	if err != nil {
 		return err
@@ -69,6 +77,7 @@ func run(logger *slog.Logger) error {
 		logger.Warn("ingest authentication disabled: set INGEST_TOKEN to require a token")
 	}
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.StreamInterceptor(grpcdelivery.StreamAuthInterceptor(cfg.IngestToken)),
 		grpc.MaxRecvMsgSize(maxIngestMessageBytes),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{

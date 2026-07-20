@@ -44,6 +44,7 @@ services:
       QUEUE_SIZE: '1024'
       STATE_TTL: '30s'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
     ports:
       - '50051:50051'
       - '8080:8080'
@@ -78,6 +79,7 @@ services:
       HISTORY_RETENTION: '24h'
       BATCH_SIZE: '100'
       FLUSH_INTERVAL: '1s'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
     ports:
       - '8081:8081'
     depends_on:
@@ -136,6 +138,15 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    restart: on-failure
+
+  jaeger:
+    image: jaegertracing/jaeger:2.20.0
+    ports:
+      - '16686:16686'
+      - '4317:4317'
+    security_opt:
+      - no-new-privileges:true
     restart: on-failure
 
   prometheus:

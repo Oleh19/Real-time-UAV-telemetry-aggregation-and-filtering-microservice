@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"uavmonitor/internal/telemetry"
 )
@@ -98,7 +100,11 @@ func (h *HistoryWriter) flush(ctx context.Context, batch []jetstream.Msg) {
 	if len(samples) == 0 {
 		return
 	}
+	ctx, span := tracer.Start(ctx, "save history batch",
+		trace.WithAttributes(attribute.Int("batch.size", len(samples))))
+	defer span.End()
 	if err := h.repo.SaveHistoryBatch(ctx, samples); err != nil {
+		span.RecordError(err)
 		h.logger.Error("save telemetry history batch", "batch_size", len(samples), "error", err)
 		for _, msg := range valid {
 			if nakErr := msg.NakWithDelay(redeliveryDelay); nakErr != nil {

@@ -15,6 +15,7 @@ import (
 	"uavmonitor/internal/env"
 	"uavmonitor/internal/geofence"
 	"uavmonitor/internal/health"
+	"uavmonitor/internal/tracing"
 )
 
 func main() {
@@ -39,6 +40,12 @@ func run(logger *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	stopTracing, err := tracing.Setup(ctx, "uav-geofence", env.String("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
+	if err != nil {
+		return err
+	}
+	defer stopTracing()
 
 	deps, cleanup, err := newDependencies(ctx, cfg, logger)
 	if err != nil {

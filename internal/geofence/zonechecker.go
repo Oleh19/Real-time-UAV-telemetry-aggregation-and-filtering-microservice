@@ -9,11 +9,16 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
+
+var tracer = otel.Tracer("uavmonitor/geofence")
 
 type AlertPublisher interface {
 	PublishAlert(ctx context.Context, breach telemetry.ZoneBreach) error
@@ -81,7 +86,10 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 				case <-ctx.Done():
 					return
 				case msg := <-messages:
-					z.Process(ctx, msg.Data())
+					msgCtx := natspub.ExtractTraceContext(ctx, msg.Headers())
+					msgCtx, span := tracer.Start(msgCtx, "zone check", trace.WithSpanKind(trace.SpanKindConsumer))
+					z.Process(msgCtx, msg.Data())
+					span.End()
 					if err := msg.Ack(); err != nil {
 						z.logger.Error("ack telemetry message", "error", err)
 					}

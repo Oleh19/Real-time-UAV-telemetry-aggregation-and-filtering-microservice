@@ -7,9 +7,11 @@ import (
 	"sync/atomic"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
 
@@ -46,6 +48,10 @@ func (j *BreachJournal) Run(ctx context.Context, consumer jetstream.Consumer) er
 }
 
 func (j *BreachJournal) record(ctx context.Context, msg jetstream.Msg) {
+	ctx = natspub.ExtractTraceContext(ctx, msg.Headers())
+	ctx, span := tracer.Start(ctx, "record zone breach", trace.WithSpanKind(trace.SpanKindConsumer))
+	defer span.End()
+
 	breach, ok := decodeBreach(msg.Data(), j.logger)
 	if !ok {
 		if err := msg.Term(); err != nil {
@@ -54,6 +60,7 @@ func (j *BreachJournal) record(ctx context.Context, msg jetstream.Msg) {
 		return
 	}
 	if err := j.repo.SaveZoneBreach(ctx, breach); err != nil {
+		span.RecordError(err)
 		j.logger.Error("save zone breach", "drone_id", breach.Sample.DroneID, "zone_id", breach.Zone.ID, "error", err)
 		if nakErr := msg.NakWithDelay(redeliveryDelay); nakErr != nil {
 			j.logger.Error("nak breach message", "error", nakErr)
