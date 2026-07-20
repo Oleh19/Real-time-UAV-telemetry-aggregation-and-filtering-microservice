@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"sync"
@@ -60,12 +60,10 @@ func run(logger *slog.Logger) error {
 
 	var droneIDs atomic.Int64
 	var wg sync.WaitGroup
-	for slot := 0; slot < cfg.DroneCount; slot++ {
-		wg.Add(1)
-		go func(slot int) {
-			defer wg.Done()
+	for slot := range cfg.DroneCount {
+		wg.Go(func() {
 			runDroneSlot(ctx, client, cfg, slot, &droneIDs, logger)
-		}(slot)
+		})
 	}
 	wg.Wait()
 
@@ -82,9 +80,9 @@ func (t ingestToken) GetRequestMetadata(context.Context, ...string) (map[string]
 func (ingestToken) RequireTransportSecurity() bool { return false }
 
 func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(slot)))
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(slot)))
 	for {
-		respawnDelay := time.Duration(2+rng.Intn(28)) * time.Second
+		respawnDelay := time.Duration(2+rng.IntN(28)) * time.Second
 		select {
 		case <-ctx.Done():
 			return

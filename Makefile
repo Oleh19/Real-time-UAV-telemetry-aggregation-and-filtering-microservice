@@ -1,6 +1,6 @@
-GO_IMAGE = golang:1.22
-LINT_IMAGE = golangci/golangci-lint:v1.59.1
-BUF_IMAGE = bufbuild/buf:1.45.0
+GO_IMAGE = golang:1.26.5
+LINT_IMAGE = golangci/golangci-lint:v2.12.2
+BUF_IMAGE = bufbuild/buf:1.72.0
 NODE_IMAGE = node:22
 
 DOCKER_NODE = docker run --rm \
@@ -22,7 +22,7 @@ DOCKER_GO = docker run --rm \
 
 ITEST_PROJECT = uavmonitor-itest
 
-.PHONY: build test itest vet fmt lint tidy proto up down check prettier prettier-check web-install web-lint web-test web-build
+.PHONY: build test itest vet fmt lint tidy vuln proto up down check prettier prettier-check web-install web-lint web-test web-build
 
 GO_PKGS = ./cmd/... ./internal/...
 
@@ -62,6 +62,9 @@ lint:
 tidy:
 	$(DOCKER_GO) go mod tidy
 
+vuln:
+	$(DOCKER_GO) go run golang.org/x/vuln/cmd/govulncheck@latest $(GO_PKGS)
+
 proto:
 	docker run --rm -v "$(CURDIR)":/workspace -w /workspace $(BUF_IMAGE) generate
 
@@ -83,7 +86,7 @@ web-test:
 web-build:
 	$(DOCKER_WEB) npx ng build
 
-check: vet lint test prettier-check
+check: vet lint test vuln prettier-check
 
 up:
 	docker compose up --build

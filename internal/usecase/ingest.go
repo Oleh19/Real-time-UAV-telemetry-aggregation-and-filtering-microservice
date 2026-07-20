@@ -55,16 +55,13 @@ func NewIngestor(publisher Publisher, logger *slog.Logger, queueSize int, stateT
 }
 
 func (i *Ingestor) Start(ctx context.Context, workerCount int) {
-	for n := 0; n < workerCount; n++ {
-		i.wg.Add(1)
-		go i.worker(ctx)
+	for range workerCount {
+		i.wg.Go(func() { i.worker(ctx) })
 	}
-	i.wg.Add(1)
-	go i.evictStaleState(ctx)
+	i.wg.Go(func() { i.evictStaleState(ctx) })
 }
 
 func (i *Ingestor) worker(ctx context.Context) {
-	defer i.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
@@ -84,7 +81,6 @@ func (i *Ingestor) worker(ctx context.Context) {
 }
 
 func (i *Ingestor) evictStaleState(ctx context.Context) {
-	defer i.wg.Done()
 	interval := i.stateTTL / 2
 	if interval < 10*time.Millisecond {
 		interval = 10 * time.Millisecond

@@ -1,22 +1,32 @@
-run:
-  timeout: 5m
-
+version: '2'
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
+    - copyloopvar
+    - errorlint
     - gocritic
     - misspell
-    - errorlint
+    - nolintlint
     - unconvert
     - unparam
-    - nolintlint
-    - copyloopvar
-
-issues:
-  exclude-dirs:
-    - gen
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - gen
+      - frontend
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - gen
+      - frontend
+      - third_party$
+      - builtin$
+      - examples$

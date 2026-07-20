@@ -63,10 +63,8 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 	z.logger.Info("zone checker started", "worker_count", workerCount)
 
 	var wg sync.WaitGroup
-	for n := 0; n < workerCount; n++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workerCount {
+		wg.Go(func() {
 			for {
 				select {
 				case <-ctx.Done():
@@ -78,7 +76,7 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 					}
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	return nil

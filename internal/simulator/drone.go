@@ -7,7 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -47,7 +47,7 @@ func NewDrone(index int, rng *rand.Rand) *Drone {
 		longitude:  longitude,
 		altitude:   100 + rng.Float64()*300,
 		speed:      10 + rng.Float32()*30,
-		confidence: 60 + rng.Int31n(41),
+		confidence: 60 + rng.Int32N(41),
 		rng:        rng,
 	}
 	drone.pickWaypoint()
@@ -58,7 +58,7 @@ func spawnOutsideUkraine(rng *rand.Rand) (latitude, longitude float64) {
 	offset := spawnMinOffset + rng.Float64()*(spawnMaxOffset-spawnMinOffset)
 	alongLatitude := ukraineMinLatitude + rng.Float64()*(ukraineMaxLatitude-ukraineMinLatitude)
 	alongLongitude := ukraineMinLongitude + rng.Float64()*(ukraineMaxLongitude-ukraineMinLongitude)
-	switch rng.Intn(4) {
+	switch rng.IntN(4) {
 	case 0:
 		return ukraineMaxLatitude + offset, alongLongitude
 	case 1:
@@ -97,7 +97,7 @@ func (d *Drone) advance() *telemetryv1.DroneTelemetry {
 	if d.speed < 0 {
 		d.speed = 0
 	}
-	d.confidence += d.rng.Int31n(9) - 4
+	d.confidence += d.rng.Int32N(9) - 4
 	if d.confidence < 10 {
 		d.confidence = 10
 	}
@@ -130,7 +130,7 @@ func (d *Drone) Fly(ctx context.Context, client telemetryv1.TelemetryServiceClie
 		case <-ctx.Done():
 			return d.closeStream(stream, logger)
 		case <-ticker.C:
-			if d.rng.Intn(lifetimeTicks) == 0 {
+			if d.rng.IntN(lifetimeTicks) == 0 {
 				logger.Info("drone shot down",
 					"drone_id", d.id,
 					"latitude", d.latitude,
