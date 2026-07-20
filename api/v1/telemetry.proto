@@ -16,6 +16,12 @@ message DroneTelemetry {
   int32 confidence = 7;
 }
 
+enum BreachEvent {
+  BREACH_EVENT_UNSPECIFIED = 0;
+  BREACH_EVENT_ENTERED = 1;
+  BREACH_EVENT_EXITED = 2;
+}
+
 message ZoneBreach {
   string drone_id = 1;
   int64 zone_id = 2;
@@ -24,6 +30,7 @@ message ZoneBreach {
   double latitude = 5;
   double longitude = 6;
   double altitude = 7;
+  BreachEvent event = 8;
 }
 
 message StreamSummary {

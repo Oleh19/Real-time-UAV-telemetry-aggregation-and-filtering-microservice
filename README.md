@@ -21,6 +21,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 - **Oblast air-alert system** — real boundaries of all 27 Ukrainian regions (geoBoundaries data) with a 10 km alert buffer around each one, seeded into PostGIS on first start; `ST_Intersects` checks on every position raise an alarm for the oblast once per entry (no per-sample spam), publish a `ZoneBreach` event to `drone.alerts`, and track exits; an oblast stays alarmed while at least one drone is inside its buffer.
 - **Flight history** — batched idempotent inserts into PostGIS with automatic retention pruning.
 - **Track playback** — click any drone on the map to load its recorded track over `GET /history`, see the flight path drawn on the map, and replay it with a play button and time scrubber.
+- **Breach journal** — every zone entry and exit event flows through `drone.alerts` into a durable JetStream consumer that persists it to PostGIS; `GET /breaches` serves the log and the dashboard shows a live event feed.
 - **Last known state** — per-drone in-memory cache with TTL eviction and out-of-order protection.
 - **Live dashboard** — Leaflet map of Ukraine with heading-oriented target triangles colored by track confidence and oblast boundaries that flash red while alarmed, an air-alert panel listing every oblast, ingest metric tiles with connection status, and a tracked-targets table, refreshed every second.
 - **Observability** — health checks on every service, ingest counters, graceful shutdown with drain.

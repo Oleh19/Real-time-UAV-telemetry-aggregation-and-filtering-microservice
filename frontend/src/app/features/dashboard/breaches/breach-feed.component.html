@@ -1,0 +1,24 @@
+<section class="panel" aria-label="Zone breach journal">
+  <header class="panel-header">
+    <h2>Breach journal</h2>
+  </header>
+  @if (feed.breaches().length > 0) {
+    <ul class="events">
+      @for (breach of feed.breaches(); track breach.DroneID + breach.Event + breach.OccurredAt) {
+        <li class="event">
+          <span class="event-time">{{ breach.OccurredAt | date: 'HH:mm:ss' }}</span>
+          <span
+            class="event-badge"
+            [class.event-badge-entered]="breach.Event === 'entered'"
+            [class.event-badge-exited]="breach.Event === 'exited'"
+          >
+            {{ breach.Event }}
+          </span>
+          <span class="event-text">{{ breach.DroneID }} · {{ breach.ZoneName }}</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">No zone breaches recorded yet</p>
+  }
+</section>

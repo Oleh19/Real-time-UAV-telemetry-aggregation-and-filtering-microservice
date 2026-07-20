@@ -14,7 +14,10 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-const migrationsDir = "migrations"
+const (
+	migrationsDir           = "migrations"
+	migrationAdvisoryLockID = 748291650
+)
 
 type migration struct {
 	version int64
@@ -25,6 +28,18 @@ type migration struct {
 func (r *Repository) Migrate(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+
+	lockConn, err := r.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration lock connection: %w", err)
+	}
+	defer lockConn.Release()
+	if _, err := lockConn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationAdvisoryLockID); err != nil {
+		return fmt.Errorf("acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		_, _ = lockConn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockID)
+	}()
 
 	if _, err := r.pool.Exec(ctx,
 		`CREATE TABLE IF NOT EXISTS schema_migrations (

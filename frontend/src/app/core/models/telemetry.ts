@@ -25,6 +25,19 @@ export interface OblastAlert {
   drones: number;
 }
 
+export type BreachEvent = 'entered' | 'exited';
+
+export interface BreachRecord {
+  DroneID: string;
+  ZoneID: number;
+  ZoneName: string;
+  Event: BreachEvent;
+  OccurredAt: string;
+  Latitude: number;
+  Longitude: number;
+  Altitude: number;
+}
+
 export interface ZoneFeature {
   type: 'Feature';
   properties: {

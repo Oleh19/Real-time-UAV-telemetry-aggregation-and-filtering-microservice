@@ -137,6 +137,63 @@ func TestListHistoryReturnsOrderedWindow(t *testing.T) {
 	}
 }
 
+func TestZoneBreachJournalRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	repo := postgres.NewRepository(pool)
+
+	droneID := telemetry.DroneID("itest-breach-001")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM zone_breaches WHERE drone_id = $1`, string(droneID))
+	})
+
+	occurredAt := time.Now().UTC().Truncate(time.Millisecond)
+	breach := telemetry.ZoneBreach{
+		Zone: telemetry.Zone{ID: 7, Name: "Kyiv Oblast"},
+		Sample: telemetry.Sample{
+			DroneID:   droneID,
+			Timestamp: occurredAt,
+			Latitude:  50.45,
+			Longitude: 30.52,
+			Altitude:  120,
+		},
+		Event: telemetry.BreachEntered,
+	}
+
+	if err := repo.SaveZoneBreach(ctx, breach); err != nil {
+		t.Fatalf("SaveZoneBreach: %v", err)
+	}
+	if err := repo.SaveZoneBreach(ctx, breach); err != nil {
+		t.Fatalf("duplicate SaveZoneBreach: %v", err)
+	}
+	exit := breach
+	exit.Event = telemetry.BreachExited
+	exit.Sample.Timestamp = occurredAt.Add(time.Minute)
+	if err := repo.SaveZoneBreach(ctx, exit); err != nil {
+		t.Fatalf("SaveZoneBreach exit: %v", err)
+	}
+
+	records, err := repo.ListZoneBreaches(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListZoneBreaches: %v", err)
+	}
+	var mine []postgres.BreachRecord
+	for _, rec := range records {
+		if rec.DroneID == droneID {
+			mine = append(mine, rec)
+		}
+	}
+	if len(mine) != 2 {
+		t.Fatalf("journal has %d records for %s, want 2 (duplicate deduped)", len(mine), droneID)
+	}
+	if mine[0].Event != telemetry.BreachExited {
+		t.Errorf("newest record event = %s, want exited first (DESC order)", mine[0].Event)
+	}
+	if mine[1].ZoneName != "Kyiv Oblast" || mine[1].Latitude != 50.45 {
+		t.Errorf("record = zone %q lat %f, want Kyiv Oblast 50.45", mine[1].ZoneName, mine[1].Latitude)
+	}
+}
+
 func TestHistoryBatchInsertConflictAndRetention(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)

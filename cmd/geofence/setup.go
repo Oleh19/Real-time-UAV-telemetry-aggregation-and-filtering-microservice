@@ -25,6 +25,7 @@ type dependencies struct {
 	oblasts         []telemetry.Zone
 	historyConsumer jetstream.Consumer
 	zonesConsumer   jetstream.Consumer
+	breachConsumer  jetstream.Consumer
 }
 
 func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logger) (*dependencies, func(), error) {
@@ -57,12 +58,17 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		return nil, nil, err
 	}
 
-	historyConsumer, err := newConsumer(ctx, js, "geofence-history")
+	historyConsumer, err := newConsumer(ctx, js, "geofence-history", natspub.SubjectTelemetry)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	zonesConsumer, err := newConsumer(ctx, js, "geofence-zones")
+	zonesConsumer, err := newConsumer(ctx, js, "geofence-zones", natspub.SubjectTelemetry)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	breachConsumer, err := newConsumer(ctx, js, "geofence-breach-journal", natspub.SubjectAlerts)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -107,13 +113,14 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		oblasts:         oblasts,
 		historyConsumer: historyConsumer,
 		zonesConsumer:   zonesConsumer,
+		breachConsumer:  breachConsumer,
 	}, cleanup, nil
 }
 
-func newConsumer(ctx context.Context, js jetstream.JetStream, durable string) (jetstream.Consumer, error) {
+func newConsumer(ctx context.Context, js jetstream.JetStream, durable, subject string) (jetstream.Consumer, error) {
 	return js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
 		Durable:       durable,
-		FilterSubject: natspub.SubjectTelemetry,
+		FilterSubject: subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       30 * time.Second,
 		MaxDeliver:    10,

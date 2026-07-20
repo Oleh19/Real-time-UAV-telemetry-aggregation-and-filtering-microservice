@@ -72,7 +72,15 @@ type Zone struct {
 	Name string
 }
 
+type BreachEvent string
+
+const (
+	BreachEntered BreachEvent = "entered"
+	BreachExited  BreachEvent = "exited"
+)
+
 type ZoneBreach struct {
 	Zone   Zone
 	Sample Sample
+	Event  BreachEvent
 }

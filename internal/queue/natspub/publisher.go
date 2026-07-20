@@ -174,5 +174,13 @@ func breachToProto(breach telemetry.ZoneBreach) *telemetryv1.ZoneBreach {
 		Latitude:  breach.Sample.Latitude,
 		Longitude: breach.Sample.Longitude,
 		Altitude:  breach.Sample.Altitude,
+		Event:     breachEventToProto(breach.Event),
 	}
+}
+
+func breachEventToProto(event telemetry.BreachEvent) telemetryv1.BreachEvent {
+	if event == telemetry.BreachExited {
+		return telemetryv1.BreachEvent_BREACH_EVENT_EXITED
+	}
+	return telemetryv1.BreachEvent_BREACH_EVENT_ENTERED
 }

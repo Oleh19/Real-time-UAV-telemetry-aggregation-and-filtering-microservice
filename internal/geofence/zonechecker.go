@@ -101,7 +101,7 @@ func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 			"longitude", sample.Longitude,
 			"altitude", sample.Altitude,
 		)
-		if err := z.alerts.PublishAlert(ctx, telemetry.ZoneBreach{Zone: zone, Sample: sample}); err != nil {
+		if err := z.alerts.PublishAlert(ctx, telemetry.ZoneBreach{Zone: zone, Sample: sample, Event: telemetry.BreachEntered}); err != nil {
 			z.logger.Error("publish breach alert", "drone_id", sample.DroneID, "zone_id", zone.ID, "error", err)
 		}
 	}
@@ -111,6 +111,9 @@ func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 			"zone_id", zone.ID,
 			"zone_name", zone.Name,
 		)
+		if err := z.alerts.PublishAlert(ctx, telemetry.ZoneBreach{Zone: zone, Sample: sample, Event: telemetry.BreachExited}); err != nil {
+			z.logger.Error("publish exit alert", "drone_id", sample.DroneID, "zone_id", zone.ID, "error", err)
+		}
 	}
 }
 

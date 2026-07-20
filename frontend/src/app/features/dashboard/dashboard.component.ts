@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
+import { BreachFeedComponent } from './breaches/breach-feed.component';
 import { DroneListComponent } from './drones/drone-list.component';
 import { PlaybackPanelComponent } from './history/playback-panel.component';
 import { DroneMapComponent } from './map/drone-map.component';
@@ -15,6 +16,7 @@ import { OblastPanelComponent } from './oblasts/oblast-panel.component';
     OblastPanelComponent,
     DroneListComponent,
     PlaybackPanelComponent,
+    BreachFeedComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',

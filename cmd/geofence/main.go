@@ -80,16 +80,19 @@ func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence, 
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	go func() {
 		errCh <- geofence.NewHistoryWriter(deps.repo, logger).Run(runCtx, deps.historyConsumer, cfg.BatchSize, cfg.FlushInterval)
 	}()
 	go func() {
 		errCh <- deps.checker.Run(runCtx, deps.zonesConsumer, cfg.WorkerCount, cfg.QueueSize)
 	}()
+	go func() {
+		errCh <- geofence.NewBreachJournal(deps.repo, logger).Run(runCtx, deps.breachConsumer)
+	}()
 
 	var runErr error
-	for n := 0; n < 2; n++ {
+	for n := 0; n < 3; n++ {
 		if err := <-errCh; err != nil && runErr == nil {
 			runErr = err
 			cancelRun()

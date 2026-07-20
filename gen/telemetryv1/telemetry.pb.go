@@ -22,6 +22,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type BreachEvent int32
+
+const (
+	BreachEvent_BREACH_EVENT_UNSPECIFIED BreachEvent = 0
+	BreachEvent_BREACH_EVENT_ENTERED     BreachEvent = 1
+	BreachEvent_BREACH_EVENT_EXITED      BreachEvent = 2
+)
+
+// Enum value maps for BreachEvent.
+var (
+	BreachEvent_name = map[int32]string{
+		0: "BREACH_EVENT_UNSPECIFIED",
+		1: "BREACH_EVENT_ENTERED",
+		2: "BREACH_EVENT_EXITED",
+	}
+	BreachEvent_value = map[string]int32{
+		"BREACH_EVENT_UNSPECIFIED": 0,
+		"BREACH_EVENT_ENTERED":     1,
+		"BREACH_EVENT_EXITED":      2,
+	}
+)
+
+func (x BreachEvent) Enum() *BreachEvent {
+	p := new(BreachEvent)
+	*p = x
+	return p
+}
+
+func (x BreachEvent) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BreachEvent) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_telemetry_proto_enumTypes[0].Descriptor()
+}
+
+func (BreachEvent) Type() protoreflect.EnumType {
+	return &file_v1_telemetry_proto_enumTypes[0]
+}
+
+func (x BreachEvent) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BreachEvent.Descriptor instead.
+func (BreachEvent) EnumDescriptor() ([]byte, []int) {
+	return file_v1_telemetry_proto_rawDescGZIP(), []int{0}
+}
+
 type DroneTelemetry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DroneId       string                 `protobuf:"bytes,1,opt,name=drone_id,json=droneId,proto3" json:"drone_id,omitempty"`
@@ -123,6 +172,7 @@ type ZoneBreach struct {
 	Latitude      float64                `protobuf:"fixed64,5,opt,name=latitude,proto3" json:"latitude,omitempty"`
 	Longitude     float64                `protobuf:"fixed64,6,opt,name=longitude,proto3" json:"longitude,omitempty"`
 	Altitude      float64                `protobuf:"fixed64,7,opt,name=altitude,proto3" json:"altitude,omitempty"`
+	Event         BreachEvent            `protobuf:"varint,8,opt,name=event,proto3,enum=telemetry.v1.BreachEvent" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,6 +256,13 @@ func (x *ZoneBreach) GetAltitude() float64 {
 	return 0
 }
 
+func (x *ZoneBreach) GetEvent() BreachEvent {
+	if x != nil {
+		return x.Event
+	}
+	return BreachEvent_BREACH_EVENT_UNSPECIFIED
+}
+
 type StreamSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ReceivedCount int64                  `protobuf:"varint,1,opt,name=received_count,json=receivedCount,proto3" json:"received_count,omitempty"`
@@ -280,7 +337,7 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"\x05speed\x18\x06 \x01(\x02R\x05speed\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\a \x01(\x05R\n" +
-	"confidence\"\xed\x01\n" +
+	"confidence\"\x9e\x02\n" +
 	"\n" +
 	"ZoneBreach\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x12\x17\n" +
@@ -289,11 +346,16 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1a\n" +
 	"\blatitude\x18\x05 \x01(\x01R\blatitude\x12\x1c\n" +
 	"\tlongitude\x18\x06 \x01(\x01R\tlongitude\x12\x1a\n" +
-	"\baltitude\x18\a \x01(\x01R\baltitude\"\x82\x01\n" +
+	"\baltitude\x18\a \x01(\x01R\baltitude\x12/\n" +
+	"\x05event\x18\b \x01(\x0e2\x19.telemetry.v1.BreachEventR\x05event\"\x82\x01\n" +
 	"\rStreamSummary\x12%\n" +
 	"\x0ereceived_count\x18\x01 \x01(\x03R\rreceivedCount\x12#\n" +
 	"\rdropped_count\x18\x02 \x01(\x03R\fdroppedCount\x12%\n" +
-	"\x0erejected_count\x18\x03 \x01(\x03R\rrejectedCount2b\n" +
+	"\x0erejected_count\x18\x03 \x01(\x03R\rrejectedCount*^\n" +
+	"\vBreachEvent\x12\x1c\n" +
+	"\x18BREACH_EVENT_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14BREACH_EVENT_ENTERED\x10\x01\x12\x17\n" +
+	"\x13BREACH_EVENT_EXITED\x10\x022b\n" +
 	"\x10TelemetryService\x12N\n" +
 	"\x0fStreamTelemetry\x12\x1c.telemetry.v1.DroneTelemetry\x1a\x1b.telemetry.v1.StreamSummary(\x01B\x1cZ\x1auavmonitor/gen/telemetryv1b\x06proto3"
 
@@ -309,23 +371,26 @@ func file_v1_telemetry_proto_rawDescGZIP() []byte {
 	return file_v1_telemetry_proto_rawDescData
 }
 
+var file_v1_telemetry_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_v1_telemetry_proto_goTypes = []any{
-	(*DroneTelemetry)(nil),        // 0: telemetry.v1.DroneTelemetry
-	(*ZoneBreach)(nil),            // 1: telemetry.v1.ZoneBreach
-	(*StreamSummary)(nil),         // 2: telemetry.v1.StreamSummary
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(BreachEvent)(0),              // 0: telemetry.v1.BreachEvent
+	(*DroneTelemetry)(nil),        // 1: telemetry.v1.DroneTelemetry
+	(*ZoneBreach)(nil),            // 2: telemetry.v1.ZoneBreach
+	(*StreamSummary)(nil),         // 3: telemetry.v1.StreamSummary
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_v1_telemetry_proto_depIdxs = []int32{
-	3, // 0: telemetry.v1.DroneTelemetry.timestamp:type_name -> google.protobuf.Timestamp
-	3, // 1: telemetry.v1.ZoneBreach.timestamp:type_name -> google.protobuf.Timestamp
-	0, // 2: telemetry.v1.TelemetryService.StreamTelemetry:input_type -> telemetry.v1.DroneTelemetry
-	2, // 3: telemetry.v1.TelemetryService.StreamTelemetry:output_type -> telemetry.v1.StreamSummary
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 0: telemetry.v1.DroneTelemetry.timestamp:type_name -> google.protobuf.Timestamp
+	4, // 1: telemetry.v1.ZoneBreach.timestamp:type_name -> google.protobuf.Timestamp
+	0, // 2: telemetry.v1.ZoneBreach.event:type_name -> telemetry.v1.BreachEvent
+	1, // 3: telemetry.v1.TelemetryService.StreamTelemetry:input_type -> telemetry.v1.DroneTelemetry
+	3, // 4: telemetry.v1.TelemetryService.StreamTelemetry:output_type -> telemetry.v1.StreamSummary
+	4, // [4:5] is the sub-list for method output_type
+	3, // [3:4] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_v1_telemetry_proto_init() }
@@ -338,13 +403,14 @@ func file_v1_telemetry_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_telemetry_proto_rawDesc), len(file_v1_telemetry_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_v1_telemetry_proto_goTypes,
 		DependencyIndexes: file_v1_telemetry_proto_depIdxs,
+		EnumInfos:         file_v1_telemetry_proto_enumTypes,
 		MessageInfos:      file_v1_telemetry_proto_msgTypes,
 	}.Build()
 	File_v1_telemetry_proto = out.File

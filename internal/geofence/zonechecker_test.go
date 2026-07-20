@@ -10,7 +10,7 @@ import (
 	"uavmonitor/internal/telemetry"
 )
 
-func TestZoneCheckerAlertsOnEnterOnly(t *testing.T) {
+func TestZoneCheckerPublishesEnterAndExitEvents(t *testing.T) {
 	locator := &fakeLocator{}
 	alerts := &fakeAlerts{}
 	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
@@ -31,23 +31,29 @@ func TestZoneCheckerAlertsOnEnterOnly(t *testing.T) {
 
 	locator.setZones(nil)
 	checker.Process(ctx, payloadAt("drone-001", base.Add(2*time.Second)))
-	if got := alerts.count(); got != 1 {
-		t.Fatalf("alerts after leaving zone = %d, want still 1", got)
+	if got := alerts.count(); got != 2 {
+		t.Fatalf("alerts after leaving zone = %d, want 2 (enter + exit)", got)
 	}
 
 	locator.setZones([]telemetry.Zone{zone})
 	checker.Process(ctx, payloadAt("drone-001", base.Add(3*time.Second)))
-	if got := alerts.count(); got != 2 {
-		t.Fatalf("alerts after re-entering zone = %d, want 2", got)
+	if got := alerts.count(); got != 3 {
+		t.Fatalf("alerts after re-entering zone = %d, want 3", got)
 	}
 
-	breach := func() telemetry.ZoneBreach {
+	breaches := func() []telemetry.ZoneBreach {
 		alerts.mu.Lock()
 		defer alerts.mu.Unlock()
-		return alerts.breaches[0]
+		return append([]telemetry.ZoneBreach(nil), alerts.breaches...)
 	}()
-	if breach.Zone.ID != zone.ID || breach.Sample.DroneID != "drone-001" {
-		t.Errorf("breach = zone %d drone %s, want zone %d drone drone-001", breach.Zone.ID, breach.Sample.DroneID, zone.ID)
+	wantEvents := []telemetry.BreachEvent{telemetry.BreachEntered, telemetry.BreachExited, telemetry.BreachEntered}
+	for n, want := range wantEvents {
+		if breaches[n].Event != want {
+			t.Errorf("breach[%d].Event = %s, want %s", n, breaches[n].Event, want)
+		}
+	}
+	if breaches[0].Zone.ID != zone.ID || breaches[0].Sample.DroneID != "drone-001" {
+		t.Errorf("breach = zone %d drone %s, want zone %d drone drone-001", breaches[0].Zone.ID, breaches[0].Sample.DroneID, zone.ID)
 	}
 }
 
