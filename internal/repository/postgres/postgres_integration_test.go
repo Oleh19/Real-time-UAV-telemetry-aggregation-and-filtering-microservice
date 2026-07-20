@@ -137,6 +137,69 @@ func TestListHistoryReturnsOrderedWindow(t *testing.T) {
 	}
 }
 
+func TestCustomZoneLifecycle(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	repo := postgres.NewRepository(pool)
+
+	zoneName := "itest-custom-zone-airfield"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM custom_zones WHERE name = $1`, zoneName)
+	})
+
+	square := [][2]float64{{30.0, 50.0}, {30.2, 50.0}, {30.2, 50.2}, {30.0, 50.2}}
+	zone, err := repo.CreateCustomZone(ctx, zoneName, square)
+	if err != nil {
+		t.Fatalf("CreateCustomZone: %v", err)
+	}
+	if zone.ID <= postgres.CustomZoneIDOffset {
+		t.Fatalf("zone ID = %d, want it offset above %d", zone.ID, postgres.CustomZoneIDOffset)
+	}
+
+	features, err := repo.ListCustomZoneFeatures(ctx)
+	if err != nil {
+		t.Fatalf("ListCustomZoneFeatures: %v", err)
+	}
+	found := false
+	for _, f := range features {
+		if f.Zone.ID == zone.ID && f.Zone.Name == zoneName {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("created zone is missing from ListCustomZoneFeatures")
+	}
+
+	alertFeatures, err := repo.ListAlertZoneFeatures(ctx)
+	if err != nil {
+		t.Fatalf("ListAlertZoneFeatures: %v", err)
+	}
+	inUnion := false
+	for _, f := range alertFeatures {
+		if f.Zone.ID == zone.ID {
+			inUnion = true
+		}
+	}
+	if !inUnion {
+		t.Fatal("custom zone is missing from the alert zone union used by the geofence index")
+	}
+
+	if _, err := repo.CreateCustomZone(ctx, zoneName, [][2]float64{{30.0, 50.0}, {30.1, 50.1}}); err == nil {
+		t.Fatal("CreateCustomZone accepted a 2-point polygon")
+	}
+
+	deleted, err := repo.DeleteCustomZone(ctx, zone.ID)
+	if err != nil {
+		t.Fatalf("DeleteCustomZone: %v", err)
+	}
+	if !deleted {
+		t.Fatal("DeleteCustomZone reported nothing deleted")
+	}
+	if deleted, _ := repo.DeleteCustomZone(ctx, zone.ID); deleted {
+		t.Fatal("second DeleteCustomZone deleted something")
+	}
+}
+
 func TestZoneBreachJournalRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)

@@ -28,9 +28,12 @@ func (r *Repository) ListAlertZoneFeatures(ctx context.Context) ([]ZoneFeature, 
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, name, ST_AsGeoJSON(alert_zone)
-		   FROM oblasts
-		  ORDER BY name`,
+		`SELECT id, name, geometry FROM (
+			SELECT id, name, ST_AsGeoJSON(alert_zone) AS geometry FROM oblasts
+			UNION ALL
+			SELECT id + $1, name, ST_AsGeoJSON(boundary) FROM custom_zones
+		 ) zones ORDER BY name`,
+		int64(CustomZoneIDOffset),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query alert zone features: %w", err)

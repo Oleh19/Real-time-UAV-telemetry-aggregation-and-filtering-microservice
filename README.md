@@ -22,6 +22,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 - **Flight history** — batched idempotent inserts into PostGIS with automatic retention pruning.
 - **Track playback** — click any drone on the map to load its recorded track over `GET /history`, see the flight path drawn on the map, and replay it with a play button and time scrubber.
 - **Breach journal** — every zone entry and exit event flows through `drone.alerts` into a durable JetStream consumer that persists it to PostGIS; `GET /breaches` serves the log and the dashboard shows a live event feed.
+- **Custom protected zones** — draw a polygon around any critical object right on the map, name it, and it joins the geofence checks alongside the oblast buffers (index refreshes immediately on create/delete); breaches of custom zones land in the same journal.
 - **Last known state** — per-drone in-memory cache with TTL eviction and out-of-order protection.
 - **Live dashboard** — Leaflet map of Ukraine with heading-oriented target triangles colored by track confidence and oblast boundaries that flash red while alarmed, an air-alert panel listing every oblast, ingest metric tiles with connection status, and a tracked-targets table, refreshed every second.
 - **Observability** — health checks on every service, Prometheus metrics on `/metrics` from both Go services, a provisioned Grafana dashboard (ingest rate, drops, queue depth, breach events, Go runtime), graceful shutdown with drain.

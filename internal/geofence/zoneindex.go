@@ -151,6 +151,15 @@ func (r *RefreshingZoneIndex) Containing(longitude, latitude float64) []telemetr
 	return r.current.Load().Containing(longitude, latitude)
 }
 
+func (r *RefreshingZoneIndex) Refresh(ctx context.Context, source ZoneFeatureSource) error {
+	index, err := loadZoneIndex(ctx, source)
+	if err != nil {
+		return err
+	}
+	r.current.Store(index)
+	return nil
+}
+
 func (r *RefreshingZoneIndex) Run(ctx context.Context, source ZoneFeatureSource, interval time.Duration, logger *slog.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

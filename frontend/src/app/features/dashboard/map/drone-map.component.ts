@@ -13,6 +13,7 @@ import * as L from 'leaflet';
 import { DroneSample, ZoneFeatureCollection } from '../../../core/models/telemetry';
 import { TelemetryService } from '../../../core/telemetry.service';
 import { TrackHistoryService } from '../history/track-history.service';
+import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
 
 const MAP_CENTER: L.LatLngExpression = [48.7, 31.2];
 const MAP_ZOOM = 6;
@@ -45,6 +46,21 @@ const playbackMarkerStyle: L.CircleMarkerOptions = {
   fillOpacity: 0.5,
 };
 
+const customZoneStyle: L.PathOptions = {
+  color: '#e8890c',
+  weight: 2,
+  fillColor: '#e8890c',
+  fillOpacity: 0.12,
+};
+
+const zonePreviewStyle: L.PolylineOptions = {
+  color: '#e8890c',
+  weight: 2,
+  dashArray: '6 4',
+  fillColor: '#e8890c',
+  fillOpacity: 0.08,
+};
+
 @Component({
   selector: 'app-drone-map',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,11 +70,14 @@ const playbackMarkerStyle: L.CircleMarkerOptions = {
 export class DroneMapComponent {
   private readonly telemetry = inject(TelemetryService);
   private readonly history = inject(TrackHistoryService);
+  private readonly customZones = inject(CustomZonesService);
   private readonly mapHost = viewChild.required<ElementRef<HTMLDivElement>>('mapHost');
 
   private readonly mapReady = signal(false);
   private map?: L.Map;
   private zonesLayer?: L.GeoJSON;
+  private customZonesLayer?: L.GeoJSON;
+  private zonePreviewLayer?: L.Polygon;
   private trackLayer?: L.Polyline;
   private playbackMarker?: L.CircleMarker;
   private readonly zoneLayersById = new Map<number, L.Path>();
@@ -99,6 +118,18 @@ export class DroneMapComponent {
       }
       this.renderPlaybackMarker(this.history.currentPoint());
     });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderCustomZones(this.customZones.zones());
+    });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderZonePreview(this.customZones.drawing(), this.customZones.vertices());
+    });
   }
 
   private initMap(): void {
@@ -107,6 +138,9 @@ export class DroneMapComponent {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(this.map);
+    this.map.on('click', (event: L.LeafletMouseEvent) => {
+      this.customZones.addVertex({ latitude: event.latlng.lat, longitude: event.latlng.lng });
+    });
     this.mapReady.set(true);
   }
 
@@ -158,7 +192,11 @@ export class DroneMapComponent {
       const marker = L.marker(position, { icon: droneIcon(color, bearing) }).bindTooltip(
         tooltipFor(drone),
       );
-      marker.on('click', () => this.history.load(drone.DroneID));
+      marker.on('click', () => {
+        if (!this.customZones.drawing()) {
+          this.history.load(drone.DroneID);
+        }
+      });
       marker.addTo(this.map);
       this.markers.set(drone.DroneID, marker);
       this.iconKeys.set(drone.DroneID, iconKey);
@@ -172,6 +210,33 @@ export class DroneMapComponent {
         this.iconKeys.delete(id);
       }
     }
+  }
+
+  private renderCustomZones(zones: ZoneFeatureCollection): void {
+    if (!this.map) {
+      return;
+    }
+    this.customZonesLayer?.remove();
+    this.customZonesLayer = L.geoJSON(zones, {
+      style: customZoneStyle,
+      onEachFeature: (feature, layer) => {
+        layer.bindTooltip(String(feature.properties?.['name'] ?? 'custom zone'));
+      },
+    }).addTo(this.map);
+  }
+
+  private renderZonePreview(drawing: boolean, vertices: ZoneVertex[]): void {
+    if (!this.map) {
+      return;
+    }
+    this.zonePreviewLayer?.remove();
+    this.zonePreviewLayer = undefined;
+    this.mapHost().nativeElement.style.cursor = drawing ? 'crosshair' : '';
+    if (!drawing || vertices.length === 0) {
+      return;
+    }
+    const points = vertices.map((vertex) => L.latLng(vertex.latitude, vertex.longitude));
+    this.zonePreviewLayer = L.polygon(points, zonePreviewStyle).addTo(this.map);
   }
 
   private renderTrack(track: DroneSample[]): void {

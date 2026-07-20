@@ -6,6 +6,7 @@ import { PlaybackPanelComponent } from './history/playback-panel.component';
 import { DroneMapComponent } from './map/drone-map.component';
 import { MetricsPanelComponent } from './metrics/metrics-panel.component';
 import { OblastPanelComponent } from './oblasts/oblast-panel.component';
+import { ZonePanelComponent } from './zones/zone-panel.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -17,6 +18,7 @@ import { OblastPanelComponent } from './oblasts/oblast-panel.component';
     DroneListComponent,
     PlaybackPanelComponent,
     BreachFeedComponent,
+    ZonePanelComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',

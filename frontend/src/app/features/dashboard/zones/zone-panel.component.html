@@ -1,0 +1,62 @@
+<section class="panel" aria-label="Custom protected zones">
+  <header class="panel-header">
+    <h2>Custom zones</h2>
+    @if (!zones.drawing()) {
+      <button type="button" class="action" (click)="zones.startDrawing()">Draw zone</button>
+    }
+  </header>
+  @if (zones.drawing()) {
+    <div class="editor">
+      <p class="hint">
+        Click the map to add polygon points ({{ zones.vertices().length }} placed, 3+ needed).
+      </p>
+      <input
+        class="name-input"
+        type="text"
+        placeholder="Zone name"
+        maxlength="100"
+        aria-label="Zone name"
+        [value]="zoneName()"
+        (input)="onNameInput($event)"
+      />
+      <div class="editor-actions">
+        <button
+          type="button"
+          class="action"
+          [disabled]="!zones.canSave() || !zoneName().trim()"
+          (click)="save()"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          class="action secondary"
+          [disabled]="zones.vertices().length === 0"
+          (click)="zones.undoVertex()"
+        >
+          Undo point
+        </button>
+        <button type="button" class="action secondary" (click)="cancel()">Cancel</button>
+      </div>
+    </div>
+  }
+  @if (zones.zones().features.length > 0) {
+    <ul class="zone-list">
+      @for (zone of zones.zones().features; track zone.properties.id) {
+        <li class="zone-row">
+          <span class="zone-name">{{ zone.properties.name }}</span>
+          <button
+            type="button"
+            class="delete"
+            aria-label="Delete zone"
+            (click)="zones.remove(zone.properties.id)"
+          >
+            ×
+          </button>
+        </li>
+      }
+    </ul>
+  } @else if (!zones.drawing()) {
+    <p class="placeholder">No custom zones yet — draw one around a critical object</p>
+  }
+</section>
