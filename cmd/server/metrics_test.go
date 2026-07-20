@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"uavmonitor/internal/fusion"
 	"uavmonitor/internal/telemetry"
 	"uavmonitor/internal/usecase"
 )
@@ -25,7 +26,7 @@ func TestMetricsHandlerExposesIngestMetrics(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ingestor := usecase.NewIngestor(nopPublisher{}, logger, 8, time.Minute)
 
-	handler := newMetricsHandler(ingestor, fakeFailures(3))
+	handler := newMetricsHandler(ingestor, fakeFailures(3), fusion.NewFuser(fusion.DefaultConfig()))
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest("GET", "/metrics", nil))
 
@@ -39,6 +40,7 @@ func TestMetricsHandlerExposesIngestMetrics(t *testing.T) {
 		"uav_ingest_failed_total 3",
 		"uav_ingest_queue_capacity 8",
 		"uav_tracked_drones 0",
+		"uav_fused_tracks 0",
 		"go_goroutines",
 	}
 	for _, want := range wanted {

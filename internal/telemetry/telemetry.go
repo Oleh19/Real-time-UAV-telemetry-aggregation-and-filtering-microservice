@@ -8,6 +8,8 @@ import (
 
 type DroneID string
 
+type StationID string
+
 type ZoneID int64
 
 const (
@@ -26,6 +28,7 @@ const (
 
 type Sample struct {
 	DroneID    DroneID
+	StationID  StationID
 	Timestamp  time.Time
 	Latitude   float64
 	Longitude  float64

@@ -65,6 +65,7 @@ func (h *Handler) StreamTelemetry(stream telemetryv1.TelemetryService_StreamTele
 func fromProto(msg *telemetryv1.DroneTelemetry) telemetry.Sample {
 	return telemetry.Sample{
 		DroneID:    telemetry.DroneID(msg.GetDroneId()),
+		StationID:  telemetry.StationID(msg.GetStationId()),
 		Timestamp:  msg.GetTimestamp().AsTime(),
 		Latitude:   msg.GetLatitude(),
 		Longitude:  msg.GetLongitude(),

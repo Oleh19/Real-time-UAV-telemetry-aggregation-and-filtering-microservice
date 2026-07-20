@@ -15,6 +15,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 ## Features
 
 - **Streaming ingest** — the detection network pushes target track reports over gRPC client streams; a worker pool with a bounded queue applies backpressure and consciously drops overflow instead of falling over.
+- **Multi-sensor track fusion** — several detection stations report the same target with noise and their own local track IDs; a fusion engine associates observations across stations by spatio-temporal gating (tracks from one station never merge with each other), averages positions over a freshness window, and emits one canonical `target-NNN` track that the whole downstream pipeline sees.
 - **Authenticated & hardened** — bearer-token auth on the ingest path, gRPC message-size limits, distroless read-only containers with dropped capabilities, and nginx security headers + rate limiting (see [Security](#security)).
 - **Validation and filtering** — coordinate ranges, track confidence bounds, and timestamp drift are checked on every sample; invalid samples are rejected and counted without killing the stream.
 - **Durable pipeline** — samples flow through a NATS JetStream stream with durable consumers: if the geofence worker is down, telemetry waits in the stream and is processed after restart, with zero loss.

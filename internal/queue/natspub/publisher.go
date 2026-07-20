@@ -183,6 +183,7 @@ func (p *Publisher) PublishAlert(ctx context.Context, breach telemetry.ZoneBreac
 func toProto(sample telemetry.Sample) *telemetryv1.DroneTelemetry {
 	return &telemetryv1.DroneTelemetry{
 		DroneId:    string(sample.DroneID),
+		StationId:  string(sample.StationID),
 		Timestamp:  timestamppb.New(sample.Timestamp),
 		Latitude:   sample.Latitude,
 		Longitude:  sample.Longitude,

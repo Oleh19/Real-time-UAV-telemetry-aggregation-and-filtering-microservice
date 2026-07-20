@@ -19,7 +19,7 @@ type telemetryEvent struct {
 	Stats  usecase.Stats      `json:"stats"`
 }
 
-func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
+func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, fuser fusionStats, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		if natsConn.Status() != nats.CONNECTED {
@@ -28,7 +28,7 @@ func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPu
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.Handle("GET /metrics", newMetricsHandler(ingestor, publisher))
+	mux.Handle("GET /metrics", newMetricsHandler(ingestor, publisher, fuser))
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, metricsSnapshot(ingestor, publisher))

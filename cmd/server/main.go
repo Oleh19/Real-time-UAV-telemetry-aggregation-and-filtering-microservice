@@ -20,6 +20,7 @@ import (
 	"uavmonitor/internal/config"
 	grpcdelivery "uavmonitor/internal/delivery/grpc"
 	"uavmonitor/internal/env"
+	"uavmonitor/internal/fusion"
 	"uavmonitor/internal/health"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/tracing"
@@ -67,7 +68,8 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL)
+	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL, usecase.WithResolver(fuser))
 
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
@@ -99,7 +101,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

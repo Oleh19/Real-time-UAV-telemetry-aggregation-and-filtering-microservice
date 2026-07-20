@@ -18,10 +18,12 @@ type Server struct {
 }
 
 type Simulator struct {
-	ServerAddr   string
-	DroneCount   int
-	SendInterval time.Duration
-	IngestToken  string
+	ServerAddr        string
+	DroneCount        int
+	StationCount      int
+	ObservationNoiseM int
+	SendInterval      time.Duration
+	IngestToken       string
 }
 
 type Geofence struct {
@@ -78,14 +80,30 @@ func LoadSimulator() (Simulator, error) {
 	if err != nil {
 		return Simulator{}, err
 	}
+	stationCount, err := env.Int("STATION_COUNT", 1)
+	if err != nil {
+		return Simulator{}, err
+	}
+	observationNoise, err := env.Int("OBS_NOISE_METERS", 60)
+	if err != nil {
+		return Simulator{}, err
+	}
 	cfg := Simulator{
-		ServerAddr:   env.String("SERVER_ADDR", "localhost:50051"),
-		DroneCount:   droneCount,
-		SendInterval: sendInterval,
-		IngestToken:  env.String("INGEST_TOKEN", ""),
+		ServerAddr:        env.String("SERVER_ADDR", "localhost:50051"),
+		DroneCount:        droneCount,
+		StationCount:      stationCount,
+		ObservationNoiseM: observationNoise,
+		SendInterval:      sendInterval,
+		IngestToken:       env.String("INGEST_TOKEN", ""),
 	}
 	if cfg.DroneCount < 1 {
 		return Simulator{}, fmt.Errorf("validate DRONE_COUNT: must be >= 1, got %d", cfg.DroneCount)
+	}
+	if cfg.StationCount < 1 || cfg.StationCount > 16 {
+		return Simulator{}, fmt.Errorf("validate STATION_COUNT: must be within [1, 16], got %d", cfg.StationCount)
+	}
+	if cfg.ObservationNoiseM < 0 {
+		return Simulator{}, fmt.Errorf("validate OBS_NOISE_METERS: must be >= 0, got %d", cfg.ObservationNoiseM)
 	}
 	if cfg.SendInterval < 10*time.Millisecond {
 		return Simulator{}, fmt.Errorf("validate SEND_INTERVAL: must be >= 10ms, got %s", cfg.SendInterval)

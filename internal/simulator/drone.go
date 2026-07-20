@@ -2,9 +2,7 @@ package simulator
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"math/rand/v2"
@@ -115,12 +113,11 @@ func (d *Drone) advance() *telemetryv1.DroneTelemetry {
 	}
 }
 
-func (d *Drone) Fly(ctx context.Context, client telemetryv1.TelemetryServiceClient, interval time.Duration, logger *slog.Logger) error {
-	stream, err := client.StreamTelemetry(ctx)
-	if err != nil {
-		return fmt.Errorf("open stream for %s: %w", d.id, err)
-	}
+func (d *Drone) ID() string {
+	return d.id
+}
 
+func (d *Drone) Fly(ctx context.Context, interval time.Duration, emit func(*telemetryv1.DroneTelemetry) error, logger *slog.Logger) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -128,7 +125,7 @@ func (d *Drone) Fly(ctx context.Context, client telemetryv1.TelemetryServiceClie
 	for {
 		select {
 		case <-ctx.Done():
-			return d.closeStream(stream, logger)
+			return nil
 		case <-ticker.C:
 			if d.rng.IntN(lifetimeTicks) == 0 {
 				logger.Info("drone shot down",
@@ -136,27 +133,11 @@ func (d *Drone) Fly(ctx context.Context, client telemetryv1.TelemetryServiceClie
 					"latitude", d.latitude,
 					"longitude", d.longitude,
 				)
-				return d.closeStream(stream, logger)
+				return nil
 			}
-			if err := stream.Send(d.advance()); err != nil {
-				return fmt.Errorf("send telemetry for %s: %w", d.id, err)
+			if err := emit(d.advance()); err != nil {
+				return fmt.Errorf("emit telemetry for %s: %w", d.id, err)
 			}
 		}
 	}
-}
-
-func (d *Drone) closeStream(stream telemetryv1.TelemetryService_StreamTelemetryClient, logger *slog.Logger) error {
-	summary, err := stream.CloseAndRecv()
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("close stream for %s: %w", d.id, err)
-	}
-	if summary != nil {
-		logger.Info("stream closed",
-			"drone_id", d.id,
-			"received_by_server", summary.GetReceivedCount(),
-			"dropped_by_server", summary.GetDroppedCount(),
-			"rejected_by_server", summary.GetRejectedCount(),
-		)
-	}
-	return nil
 }

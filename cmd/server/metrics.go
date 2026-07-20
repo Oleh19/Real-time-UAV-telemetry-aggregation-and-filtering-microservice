@@ -14,7 +14,12 @@ type publishFailureCounter interface {
 	Failed() int64
 }
 
-func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter) http.Handler {
+type fusionStats interface {
+	ActiveTracks() int
+	MergesTotal() int64
+}
+
+func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats) http.Handler {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -36,6 +41,10 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		func() int64 { return int64(ingestor.QueueCapacity()) })
 	registerGauge(registry, "uav_tracked_drones", "Drones currently tracked in the last-known-state cache.",
 		func() int64 { return int64(ingestor.TrackedDrones()) })
+	registerGauge(registry, "uav_fused_tracks", "Canonical tracks currently maintained by the fusion engine.",
+		func() int64 { return int64(fuser.ActiveTracks()) })
+	registerCounter(registry, "uav_fusion_merges_total", "Cross-station observations associated to an existing track.",
+		fuser.MergesTotal)
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 

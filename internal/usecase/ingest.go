@@ -22,6 +22,18 @@ type Publisher interface {
 	Publish(ctx context.Context, sample telemetry.Sample) error
 }
 
+type TrackResolver interface {
+	Resolve(sample telemetry.Sample) telemetry.Sample
+}
+
+type Option func(*Ingestor)
+
+func WithResolver(resolver TrackResolver) Option {
+	return func(i *Ingestor) {
+		i.resolver = resolver
+	}
+}
+
 type lastEntry struct {
 	sample   telemetry.Sample
 	storedAt time.Time
@@ -29,6 +41,7 @@ type lastEntry struct {
 
 type Ingestor struct {
 	publisher Publisher
+	resolver  TrackResolver
 	logger    *slog.Logger
 	queue     chan telemetry.Sample
 	done      chan struct{}
@@ -44,14 +57,18 @@ type Ingestor struct {
 	rejected  atomic.Int64
 }
 
-func NewIngestor(publisher Publisher, logger *slog.Logger, queueSize int, stateTTL time.Duration) *Ingestor {
-	return &Ingestor{
+func NewIngestor(publisher Publisher, logger *slog.Logger, queueSize int, stateTTL time.Duration, opts ...Option) *Ingestor {
+	ingestor := &Ingestor{
 		publisher: publisher,
 		logger:    logger,
 		queue:     make(chan telemetry.Sample, queueSize),
 		done:      make(chan struct{}),
 		stateTTL:  stateTTL,
 	}
+	for _, opt := range opts {
+		opt(ingestor)
+	}
+	return ingestor
 }
 
 func (i *Ingestor) QueueDepth() int {
@@ -135,6 +152,9 @@ func (i *Ingestor) Submit(ctx context.Context, sample telemetry.Sample) error {
 	if err := sample.Validate(); err != nil {
 		i.rejected.Add(1)
 		return fmt.Errorf("%w: %w", ErrInvalidSample, err)
+	}
+	if i.resolver != nil {
+		sample = i.resolver.Resolve(sample)
 	}
 	i.storeLastKnown(sample)
 	select {

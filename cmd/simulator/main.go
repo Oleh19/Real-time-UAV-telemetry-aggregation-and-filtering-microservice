@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"os"
@@ -55,6 +58,8 @@ func run(logger *slog.Logger) error {
 	logger.Info("simulator starting",
 		"server_addr", cfg.ServerAddr,
 		"max_concurrent_drones", cfg.DroneCount,
+		"stations", cfg.StationCount,
+		"observation_noise_m", cfg.ObservationNoiseM,
 		"send_interval", cfg.SendInterval.String(),
 	)
 
@@ -89,7 +94,7 @@ func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient
 		case <-time.After(respawnDelay):
 		}
 		drone := simulator.NewDrone(int(droneIDs.Add(1)), rng)
-		if err := drone.Fly(ctx, client, cfg.SendInterval, logger); err != nil {
+		if err := flyThroughStations(ctx, client, cfg, drone, rng, logger); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
@@ -97,6 +102,58 @@ func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient
 		}
 		if ctx.Err() != nil {
 			return
+		}
+	}
+}
+
+type stationLink struct {
+	station *simulator.Station
+	stream  telemetryv1.TelemetryService_StreamTelemetryClient
+}
+
+func flyThroughStations(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, drone *simulator.Drone, rng *rand.Rand, logger *slog.Logger) error {
+	links := make([]stationLink, 0, cfg.StationCount)
+	for n := 1; n <= cfg.StationCount; n++ {
+		stream, err := client.StreamTelemetry(ctx)
+		if err != nil {
+			closeLinks(links, drone.ID(), logger)
+			return fmt.Errorf("open stream for %s: %w", drone.ID(), err)
+		}
+		links = append(links, stationLink{
+			station: simulator.NewStation(n, cfg.ObservationNoiseM, rng),
+			stream:  stream,
+		})
+	}
+
+	emit := func(truth *telemetryv1.DroneTelemetry) error {
+		for _, link := range links {
+			if err := link.stream.Send(link.station.Observe(truth)); err != nil {
+				return fmt.Errorf("station %s send: %w", link.station.ID(), err)
+			}
+		}
+		return nil
+	}
+
+	flyErr := drone.Fly(ctx, cfg.SendInterval, emit, logger)
+	closeLinks(links, drone.ID(), logger)
+	return flyErr
+}
+
+func closeLinks(links []stationLink, droneID string, logger *slog.Logger) {
+	for _, link := range links {
+		summary, err := link.stream.CloseAndRecv()
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+			logger.Warn("close stream", "drone_id", droneID, "station", link.station.ID(), "error", err)
+			continue
+		}
+		if summary != nil {
+			logger.Info("stream closed",
+				"drone_id", droneID,
+				"station", link.station.ID(),
+				"received_by_server", summary.GetReceivedCount(),
+				"dropped_by_server", summary.GetDroppedCount(),
+				"rejected_by_server", summary.GetRejectedCount(),
+			)
 		}
 	}
 }

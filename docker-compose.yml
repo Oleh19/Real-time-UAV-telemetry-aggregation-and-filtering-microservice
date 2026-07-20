@@ -126,6 +126,8 @@ services:
     environment:
       SERVER_ADDR: 'server:50051'
       DRONE_COUNT: '${DRONE_COUNT:-10}'
+      STATION_COUNT: '${STATION_COUNT:-3}'
+      OBS_NOISE_METERS: '${OBS_NOISE_METERS:-80}'
       SEND_INTERVAL: '${SEND_INTERVAL:-500ms}'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
     depends_on:
