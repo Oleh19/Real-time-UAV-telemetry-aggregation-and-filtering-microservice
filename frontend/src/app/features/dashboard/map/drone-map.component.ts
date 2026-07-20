@@ -13,6 +13,7 @@ import * as L from 'leaflet';
 import { DroneSample, ZoneFeatureCollection } from '../../../core/models/telemetry';
 import { TelemetryService } from '../../../core/telemetry.service';
 import { TrackHistoryService } from '../history/track-history.service';
+import { DronePrediction, PredictionService } from '../prediction/prediction.service';
 import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
 
 const MAP_CENTER: L.LatLngExpression = [48.7, 31.2];
@@ -61,6 +62,13 @@ const zonePreviewStyle: L.PolylineOptions = {
   fillOpacity: 0.08,
 };
 
+const predictionStyle: L.PolylineOptions = {
+  color: '#8b98a9',
+  weight: 1.5,
+  dashArray: '4 6',
+  opacity: 0.8,
+};
+
 @Component({
   selector: 'app-drone-map',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,6 +79,7 @@ export class DroneMapComponent {
   private readonly telemetry = inject(TelemetryService);
   private readonly history = inject(TrackHistoryService);
   private readonly customZones = inject(CustomZonesService);
+  private readonly prediction = inject(PredictionService);
   private readonly mapHost = viewChild.required<ElementRef<HTMLDivElement>>('mapHost');
 
   private readonly mapReady = signal(false);
@@ -82,6 +91,7 @@ export class DroneMapComponent {
   private playbackMarker?: L.CircleMarker;
   private readonly zoneLayersById = new Map<number, L.Path>();
   private readonly markers = new Map<string, L.Marker>();
+  private readonly predictionLines = new Map<string, L.Polyline>();
   private readonly bearings = new Map<string, number>();
   private readonly lastPositions = new Map<string, L.LatLng>();
   private readonly iconKeys = new Map<string, string>();
@@ -130,6 +140,12 @@ export class DroneMapComponent {
       }
       this.renderZonePreview(this.customZones.drawing(), this.customZones.vertices());
     });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderPredictions(this.prediction.predictions());
+    });
   }
 
   private initMap(): void {
@@ -172,6 +188,7 @@ export class DroneMapComponent {
     if (!this.map) {
       return;
     }
+    const predictions = this.prediction.byDroneId();
     const seen = new Set<string>();
     for (const drone of drones) {
       seen.add(drone.DroneID);
@@ -179,6 +196,7 @@ export class DroneMapComponent {
       const color = confidenceColor(drone.Confidence);
       const bearing = this.updateBearing(drone.DroneID, position);
       const iconKey = `${color}:${Math.round(bearing)}`;
+      const tooltip = tooltipFor(drone, predictions.get(drone.DroneID));
       const existing = this.markers.get(drone.DroneID);
       if (existing) {
         existing.setLatLng(position);
@@ -186,12 +204,10 @@ export class DroneMapComponent {
           existing.setIcon(droneIcon(color, bearing));
           this.iconKeys.set(drone.DroneID, iconKey);
         }
-        existing.setTooltipContent(tooltipFor(drone));
+        existing.setTooltipContent(tooltip);
         continue;
       }
-      const marker = L.marker(position, { icon: droneIcon(color, bearing) }).bindTooltip(
-        tooltipFor(drone),
-      );
+      const marker = L.marker(position, { icon: droneIcon(color, bearing) }).bindTooltip(tooltip);
       marker.on('click', () => {
         if (!this.customZones.drawing()) {
           this.history.load(drone.DroneID);
@@ -208,6 +224,32 @@ export class DroneMapComponent {
         this.bearings.delete(id);
         this.lastPositions.delete(id);
         this.iconKeys.delete(id);
+      }
+    }
+  }
+
+  private renderPredictions(predictions: DronePrediction[]): void {
+    if (!this.map) {
+      return;
+    }
+    const seen = new Set<string>();
+    for (const prediction of predictions) {
+      seen.add(prediction.droneId);
+      const points = prediction.path.map(([latitude, longitude]) => L.latLng(latitude, longitude));
+      const existing = this.predictionLines.get(prediction.droneId);
+      if (existing) {
+        existing.setLatLngs(points);
+        continue;
+      }
+      this.predictionLines.set(
+        prediction.droneId,
+        L.polyline(points, predictionStyle).addTo(this.map),
+      );
+    }
+    for (const [droneId, line] of this.predictionLines) {
+      if (!seen.has(droneId)) {
+        line.remove();
+        this.predictionLines.delete(droneId);
       }
     }
   }
@@ -311,6 +353,10 @@ function confidenceColor(level: number): string {
   return '#d64545';
 }
 
-function tooltipFor(drone: DroneSample): string {
-  return `${drone.DroneID} · ${Math.round(drone.Altitude)} m · track ${drone.Confidence}%`;
+function tooltipFor(drone: DroneSample, prediction?: DronePrediction): string {
+  const base = `${drone.DroneID} · ${Math.round(drone.Altitude)} m · track ${drone.Confidence}%`;
+  if (!prediction?.eta) {
+    return base;
+  }
+  return `${base}<br>ETA ${prediction.eta.zoneName}: ~${prediction.eta.seconds}s`;
 }
