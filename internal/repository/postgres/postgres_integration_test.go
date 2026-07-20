@@ -90,6 +90,53 @@ func TestSeedOblastsIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestListHistoryReturnsOrderedWindow(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	repo := postgres.NewRepository(pool)
+
+	droneID := telemetry.DroneID("itest-history-list-001")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM telemetry_history WHERE drone_id = $1`, string(droneID))
+	})
+
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	samples := make([]telemetry.Sample, 0, 5)
+	for n := range 5 {
+		samples = append(samples, telemetry.Sample{
+			DroneID:    droneID,
+			Timestamp:  base.Add(time.Duration(n) * time.Minute),
+			Latitude:   50.0 + float64(n)*0.01,
+			Longitude:  30.0 + float64(n)*0.01,
+			Altitude:   100,
+			Speed:      20,
+			Confidence: 90,
+		})
+	}
+	if err := repo.SaveHistoryBatch(ctx, samples); err != nil {
+		t.Fatalf("SaveHistoryBatch: %v", err)
+	}
+
+	got, err := repo.ListHistory(ctx, droneID, base.Add(time.Minute), base.Add(3*time.Minute), 0)
+	if err != nil {
+		t.Fatalf("ListHistory: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("ListHistory returned %d samples, want 3", len(got))
+	}
+	for n := 1; n < len(got); n++ {
+		if got[n].Timestamp.Before(got[n-1].Timestamp) {
+			t.Fatalf("samples out of order: %s before %s", got[n].Timestamp, got[n-1].Timestamp)
+		}
+	}
+	if got[0].DroneID != droneID {
+		t.Fatalf("DroneID = %s, want %s", got[0].DroneID, droneID)
+	}
+	if got[0].Latitude != 50.01 {
+		t.Fatalf("first latitude = %f, want 50.01", got[0].Latitude)
+	}
+}
+
 func TestHistoryBatchInsertConflictAndRetention(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)

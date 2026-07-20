@@ -12,9 +12,14 @@
 }
 
 .map-pane {
+  position: relative;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--color-border);
+}
+
+.map-pane app-drone-map {
+  height: 100%;
 }
 
 .side-pane {

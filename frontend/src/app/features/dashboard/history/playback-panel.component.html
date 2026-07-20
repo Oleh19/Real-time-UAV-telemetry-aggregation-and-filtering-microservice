@@ -1,0 +1,32 @@
+@if (history.droneId(); as droneId) {
+  <div class="panel">
+    <div class="header">
+      <span class="title">Track {{ droneId }}</span>
+      <button type="button" class="close" aria-label="Close track view" (click)="close()">×</button>
+    </div>
+    @if (history.loading()) {
+      <p class="hint">Loading track…</p>
+    } @else if (history.track().length === 0) {
+      <p class="hint">No recorded points in the recent window.</p>
+    } @else {
+      <div class="controls">
+        <button type="button" class="play" (click)="history.togglePlayback()">
+          {{ history.playing() ? 'Pause' : 'Play' }}
+        </button>
+        <input
+          class="scrubber"
+          type="range"
+          min="0"
+          [max]="history.lastIndex()"
+          [value]="history.index()"
+          aria-label="Playback position"
+          (input)="onSeek($event)"
+        />
+      </div>
+      <div class="meta">
+        <span>{{ history.currentPoint()?.Timestamp | date: 'HH:mm:ss' }}</span>
+        <span>{{ history.index() + 1 }} / {{ history.track().length }}</span>
+      </div>
+    }
+  </div>
+}

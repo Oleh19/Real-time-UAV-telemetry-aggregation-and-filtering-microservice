@@ -43,6 +43,7 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 		return alertsSnapshot(deps)
 	}, logger))
 	mux.HandleFunc("GET /zones", zonesHandler(deps.repo, logger))
+	mux.HandleFunc("GET /history", historyHandler(deps.repo, logger))
 	return mux
 }
 
