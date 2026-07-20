@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TelemetryService_StreamTelemetry_FullMethodName = "/telemetry.v1.TelemetryService/StreamTelemetry"
+	TelemetryService_StreamTelemetry_FullMethodName    = "/telemetry.v1.TelemetryService/StreamTelemetry"
+	TelemetryService_SubscribeTelemetry_FullMethodName = "/telemetry.v1.TelemetryService/SubscribeTelemetry"
 )
 
 // TelemetryServiceClient is the client API for TelemetryService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TelemetryServiceClient interface {
 	StreamTelemetry(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[DroneTelemetry, StreamSummary], error)
+	SubscribeTelemetry(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DroneTelemetry], error)
 }
 
 type telemetryServiceClient struct {
@@ -50,11 +52,31 @@ func (c *telemetryServiceClient) StreamTelemetry(ctx context.Context, opts ...gr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type TelemetryService_StreamTelemetryClient = grpc.ClientStreamingClient[DroneTelemetry, StreamSummary]
 
+func (c *telemetryServiceClient) SubscribeTelemetry(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DroneTelemetry], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &TelemetryService_ServiceDesc.Streams[1], TelemetryService_SubscribeTelemetry_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SubscribeRequest, DroneTelemetry]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type TelemetryService_SubscribeTelemetryClient = grpc.ServerStreamingClient[DroneTelemetry]
+
 // TelemetryServiceServer is the server API for TelemetryService service.
 // All implementations must embed UnimplementedTelemetryServiceServer
 // for forward compatibility.
 type TelemetryServiceServer interface {
 	StreamTelemetry(grpc.ClientStreamingServer[DroneTelemetry, StreamSummary]) error
+	SubscribeTelemetry(*SubscribeRequest, grpc.ServerStreamingServer[DroneTelemetry]) error
 	mustEmbedUnimplementedTelemetryServiceServer()
 }
 
@@ -67,6 +89,9 @@ type UnimplementedTelemetryServiceServer struct{}
 
 func (UnimplementedTelemetryServiceServer) StreamTelemetry(grpc.ClientStreamingServer[DroneTelemetry, StreamSummary]) error {
 	return status.Errorf(codes.Unimplemented, "method StreamTelemetry not implemented")
+}
+func (UnimplementedTelemetryServiceServer) SubscribeTelemetry(*SubscribeRequest, grpc.ServerStreamingServer[DroneTelemetry]) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeTelemetry not implemented")
 }
 func (UnimplementedTelemetryServiceServer) mustEmbedUnimplementedTelemetryServiceServer() {}
 func (UnimplementedTelemetryServiceServer) testEmbeddedByValue()                          {}
@@ -96,6 +121,17 @@ func _TelemetryService_StreamTelemetry_Handler(srv interface{}, stream grpc.Serv
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type TelemetryService_StreamTelemetryServer = grpc.ClientStreamingServer[DroneTelemetry, StreamSummary]
 
+func _TelemetryService_SubscribeTelemetry_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(TelemetryServiceServer).SubscribeTelemetry(m, &grpc.GenericServerStream[SubscribeRequest, DroneTelemetry]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type TelemetryService_SubscribeTelemetryServer = grpc.ServerStreamingServer[DroneTelemetry]
+
 // TelemetryService_ServiceDesc is the grpc.ServiceDesc for TelemetryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -108,6 +144,11 @@ var TelemetryService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "StreamTelemetry",
 			Handler:       _TelemetryService_StreamTelemetry_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "SubscribeTelemetry",
+			Handler:       _TelemetryService_SubscribeTelemetry_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "v1/telemetry.proto",

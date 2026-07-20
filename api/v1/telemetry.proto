@@ -40,6 +40,12 @@ message StreamSummary {
   int64 rejected_count = 3;
 }
 
+message SubscribeRequest {
+  repeated string drone_ids = 1;
+  int32 min_confidence = 2;
+}
+
 service TelemetryService {
   rpc StreamTelemetry(stream DroneTelemetry) returns (StreamSummary);
+  rpc SubscribeTelemetry(SubscribeRequest) returns (stream DroneTelemetry);
 }

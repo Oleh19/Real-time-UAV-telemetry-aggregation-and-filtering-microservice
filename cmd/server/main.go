@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/broadcast"
 	"uavmonitor/internal/config"
 	grpcdelivery "uavmonitor/internal/delivery/grpc"
 	"uavmonitor/internal/env"
@@ -69,7 +70,11 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	fuser := fusion.NewFuser(fusion.DefaultConfig())
-	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL, usecase.WithResolver(fuser))
+	hub := broadcast.NewHub(broadcast.DefaultSubscriberBuffer)
+	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL,
+		usecase.WithResolver(fuser),
+		usecase.WithBroadcaster(hub),
+	)
 
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
@@ -92,7 +97,7 @@ func run(logger *slog.Logger) error {
 		}),
 		grpc.MaxConcurrentStreams(512),
 	)
-	telemetryv1.RegisterTelemetryServiceServer(grpcServer, grpcdelivery.NewHandler(ingestor, logger))
+	telemetryv1.RegisterTelemetryServiceServer(grpcServer, grpcdelivery.NewHandler(ingestor, hub, logger))
 
 	listener, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
@@ -101,7 +106,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, fuser, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -128,6 +133,7 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	hub.Close()
 	stopped := make(chan struct{})
 	go func() {
 		grpcServer.GracefulStop()

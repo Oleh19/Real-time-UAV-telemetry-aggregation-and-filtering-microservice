@@ -20,12 +20,13 @@ type Ingestor interface {
 
 type Handler struct {
 	telemetryv1.UnimplementedTelemetryServiceServer
-	ingestor Ingestor
-	logger   *slog.Logger
+	ingestor      Ingestor
+	subscriptions Subscriptions
+	logger        *slog.Logger
 }
 
-func NewHandler(ingestor Ingestor, logger *slog.Logger) *Handler {
-	return &Handler{ingestor: ingestor, logger: logger}
+func NewHandler(ingestor Ingestor, subscriptions Subscriptions, logger *slog.Logger) *Handler {
+	return &Handler{ingestor: ingestor, subscriptions: subscriptions, logger: logger}
 }
 
 func (h *Handler) StreamTelemetry(stream telemetryv1.TelemetryService_StreamTelemetryServer) error {

@@ -331,6 +331,58 @@ func (x *StreamSummary) GetRejectedCount() int64 {
 	return 0
 }
 
+type SubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DroneIds      []string               `protobuf:"bytes,1,rep,name=drone_ids,json=droneIds,proto3" json:"drone_ids,omitempty"`
+	MinConfidence int32                  `protobuf:"varint,2,opt,name=min_confidence,json=minConfidence,proto3" json:"min_confidence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscribeRequest) Reset() {
+	*x = SubscribeRequest{}
+	mi := &file_v1_telemetry_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeRequest) ProtoMessage() {}
+
+func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_telemetry_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_v1_telemetry_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SubscribeRequest) GetDroneIds() []string {
+	if x != nil {
+		return x.DroneIds
+	}
+	return nil
+}
+
+func (x *SubscribeRequest) GetMinConfidence() int32 {
+	if x != nil {
+		return x.MinConfidence
+	}
+	return 0
+}
+
 var File_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_v1_telemetry_proto_rawDesc = "" +
@@ -361,13 +413,17 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"\rStreamSummary\x12%\n" +
 	"\x0ereceived_count\x18\x01 \x01(\x03R\rreceivedCount\x12#\n" +
 	"\rdropped_count\x18\x02 \x01(\x03R\fdroppedCount\x12%\n" +
-	"\x0erejected_count\x18\x03 \x01(\x03R\rrejectedCount*^\n" +
+	"\x0erejected_count\x18\x03 \x01(\x03R\rrejectedCount\"V\n" +
+	"\x10SubscribeRequest\x12\x1b\n" +
+	"\tdrone_ids\x18\x01 \x03(\tR\bdroneIds\x12%\n" +
+	"\x0emin_confidence\x18\x02 \x01(\x05R\rminConfidence*^\n" +
 	"\vBreachEvent\x12\x1c\n" +
 	"\x18BREACH_EVENT_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14BREACH_EVENT_ENTERED\x10\x01\x12\x17\n" +
-	"\x13BREACH_EVENT_EXITED\x10\x022b\n" +
+	"\x13BREACH_EVENT_EXITED\x10\x022\xb8\x01\n" +
 	"\x10TelemetryService\x12N\n" +
-	"\x0fStreamTelemetry\x12\x1c.telemetry.v1.DroneTelemetry\x1a\x1b.telemetry.v1.StreamSummary(\x01B\x1cZ\x1auavmonitor/gen/telemetryv1b\x06proto3"
+	"\x0fStreamTelemetry\x12\x1c.telemetry.v1.DroneTelemetry\x1a\x1b.telemetry.v1.StreamSummary(\x01\x12T\n" +
+	"\x12SubscribeTelemetry\x12\x1e.telemetry.v1.SubscribeRequest\x1a\x1c.telemetry.v1.DroneTelemetry0\x01B\x1cZ\x1auavmonitor/gen/telemetryv1b\x06proto3"
 
 var (
 	file_v1_telemetry_proto_rawDescOnce sync.Once
@@ -382,22 +438,25 @@ func file_v1_telemetry_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_telemetry_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_v1_telemetry_proto_goTypes = []any{
 	(BreachEvent)(0),              // 0: telemetry.v1.BreachEvent
 	(*DroneTelemetry)(nil),        // 1: telemetry.v1.DroneTelemetry
 	(*ZoneBreach)(nil),            // 2: telemetry.v1.ZoneBreach
 	(*StreamSummary)(nil),         // 3: telemetry.v1.StreamSummary
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*SubscribeRequest)(nil),      // 4: telemetry.v1.SubscribeRequest
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_v1_telemetry_proto_depIdxs = []int32{
-	4, // 0: telemetry.v1.DroneTelemetry.timestamp:type_name -> google.protobuf.Timestamp
-	4, // 1: telemetry.v1.ZoneBreach.timestamp:type_name -> google.protobuf.Timestamp
+	5, // 0: telemetry.v1.DroneTelemetry.timestamp:type_name -> google.protobuf.Timestamp
+	5, // 1: telemetry.v1.ZoneBreach.timestamp:type_name -> google.protobuf.Timestamp
 	0, // 2: telemetry.v1.ZoneBreach.event:type_name -> telemetry.v1.BreachEvent
 	1, // 3: telemetry.v1.TelemetryService.StreamTelemetry:input_type -> telemetry.v1.DroneTelemetry
-	3, // 4: telemetry.v1.TelemetryService.StreamTelemetry:output_type -> telemetry.v1.StreamSummary
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
+	4, // 4: telemetry.v1.TelemetryService.SubscribeTelemetry:input_type -> telemetry.v1.SubscribeRequest
+	3, // 5: telemetry.v1.TelemetryService.StreamTelemetry:output_type -> telemetry.v1.StreamSummary
+	1, // 6: telemetry.v1.TelemetryService.SubscribeTelemetry:output_type -> telemetry.v1.DroneTelemetry
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
 	3, // [3:3] is the sub-list for extension extendee
 	0, // [0:3] is the sub-list for field type_name
@@ -414,7 +473,7 @@ func file_v1_telemetry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_telemetry_proto_rawDesc), len(file_v1_telemetry_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

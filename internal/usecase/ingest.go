@@ -26,11 +26,21 @@ type TrackResolver interface {
 	Resolve(sample telemetry.Sample) telemetry.Sample
 }
 
+type Broadcaster interface {
+	Broadcast(sample telemetry.Sample)
+}
+
 type Option func(*Ingestor)
 
 func WithResolver(resolver TrackResolver) Option {
 	return func(i *Ingestor) {
 		i.resolver = resolver
+	}
+}
+
+func WithBroadcaster(broadcaster Broadcaster) Option {
+	return func(i *Ingestor) {
+		i.broadcaster = broadcaster
 	}
 }
 
@@ -40,21 +50,22 @@ type lastEntry struct {
 }
 
 type Ingestor struct {
-	publisher Publisher
-	resolver  TrackResolver
-	logger    *slog.Logger
-	queue     chan telemetry.Sample
-	done      chan struct{}
-	stateTTL  time.Duration
-	lastState sync.Map
-	wg        sync.WaitGroup
-	mu        sync.RWMutex
-	closed    bool
-	received  atomic.Int64
-	dropped   atomic.Int64
-	published atomic.Int64
-	failed    atomic.Int64
-	rejected  atomic.Int64
+	publisher   Publisher
+	resolver    TrackResolver
+	broadcaster Broadcaster
+	logger      *slog.Logger
+	queue       chan telemetry.Sample
+	done        chan struct{}
+	stateTTL    time.Duration
+	lastState   sync.Map
+	wg          sync.WaitGroup
+	mu          sync.RWMutex
+	closed      bool
+	received    atomic.Int64
+	dropped     atomic.Int64
+	published   atomic.Int64
+	failed      atomic.Int64
+	rejected    atomic.Int64
 }
 
 func NewIngestor(publisher Publisher, logger *slog.Logger, queueSize int, stateTTL time.Duration, opts ...Option) *Ingestor {
@@ -110,6 +121,9 @@ func (i *Ingestor) worker(ctx context.Context) {
 				continue
 			}
 			i.published.Add(1)
+			if i.broadcaster != nil {
+				i.broadcaster.Broadcast(sample)
+			}
 		}
 	}
 }

@@ -19,7 +19,13 @@ type fusionStats interface {
 	MergesTotal() int64
 }
 
-func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats) http.Handler {
+type hubStats interface {
+	Subscribers() int
+	Delivered() int64
+	Dropped() int64
+}
+
+func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats) http.Handler {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -45,6 +51,12 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		func() int64 { return int64(fuser.ActiveTracks()) })
 	registerCounter(registry, "uav_fusion_merges_total", "Cross-station observations associated to an existing track.",
 		fuser.MergesTotal)
+	registerGauge(registry, "uav_subscribers", "Active SubscribeTelemetry streams.",
+		func() int64 { return int64(hub.Subscribers()) })
+	registerCounter(registry, "uav_subscriber_delivered_total", "Samples delivered to subscribers.",
+		hub.Delivered)
+	registerCounter(registry, "uav_subscriber_dropped_total", "Samples dropped because a subscriber was too slow.",
+		hub.Dropped)
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 

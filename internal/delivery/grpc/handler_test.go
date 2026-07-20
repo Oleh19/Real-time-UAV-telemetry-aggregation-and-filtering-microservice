@@ -113,7 +113,7 @@ func TestStreamTelemetry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := grpcdelivery.NewHandler(&fakeIngestor{errs: tt.submitErrs}, discardLogger())
+			handler := grpcdelivery.NewHandler(&fakeIngestor{errs: tt.submitErrs}, nil, discardLogger())
 			stream := &fakeStream{ctx: context.Background(), incoming: tt.incoming}
 
 			err := handler.StreamTelemetry(stream)
