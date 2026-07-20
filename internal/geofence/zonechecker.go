@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -30,12 +31,22 @@ type droneZoneState struct {
 }
 
 type ZoneChecker struct {
-	zones     ZoneLocator
-	alerts    AlertPublisher
-	logger    *slog.Logger
-	mu        sync.Mutex
-	state     map[telemetry.DroneID]*droneZoneState
-	lastPrune time.Time
+	zones        ZoneLocator
+	alerts       AlertPublisher
+	logger       *slog.Logger
+	mu           sync.Mutex
+	state        map[telemetry.DroneID]*droneZoneState
+	lastPrune    time.Time
+	enteredTotal atomic.Int64
+	exitedTotal  atomic.Int64
+}
+
+func (z *ZoneChecker) EnteredTotal() int64 {
+	return z.enteredTotal.Load()
+}
+
+func (z *ZoneChecker) ExitedTotal() int64 {
+	return z.exitedTotal.Load()
 }
 
 func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logger) *ZoneChecker {
@@ -91,6 +102,8 @@ func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 	zones := z.zones.Containing(sample.Longitude, sample.Latitude)
 
 	entered, exited := z.diffZones(sample, zones)
+	z.enteredTotal.Add(int64(len(entered)))
+	z.exitedTotal.Add(int64(len(exited)))
 	for _, zone := range entered {
 		z.logger.Error(
 			fmt.Sprintf("ALERT: Drone %s entered the alert zone of %s!", sample.DroneID, zone.Name),

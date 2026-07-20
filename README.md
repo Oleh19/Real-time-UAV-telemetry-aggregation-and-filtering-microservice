@@ -24,7 +24,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 - **Breach journal** — every zone entry and exit event flows through `drone.alerts` into a durable JetStream consumer that persists it to PostGIS; `GET /breaches` serves the log and the dashboard shows a live event feed.
 - **Last known state** — per-drone in-memory cache with TTL eviction and out-of-order protection.
 - **Live dashboard** — Leaflet map of Ukraine with heading-oriented target triangles colored by track confidence and oblast boundaries that flash red while alarmed, an air-alert panel listing every oblast, ingest metric tiles with connection status, and a tracked-targets table, refreshed every second.
-- **Observability** — health checks on every service, ingest counters, graceful shutdown with drain.
+- **Observability** — health checks on every service, Prometheus metrics on `/metrics` from both Go services, a provisioned Grafana dashboard (ingest rate, drops, queue depth, breach events, Go runtime), graceful shutdown with drain.
 
 ## Quick start
 
@@ -42,7 +42,8 @@ Then verify the system end to end:
 2. Watch alerts: `docker compose logs -f geofence` — `ALERT: Drone <id> entered the alert zone of <oblast>!` on entry, `drone left alert zone` on exit.
 3. Check durability: `docker compose stop geofence`, wait ~30 seconds, `docker compose start geofence` — the worker drains the JetStream backlog and no telemetry is lost (history keeps growing without gaps).
 4. Run the test suites: `make check` for the backend, `make web-test` for the frontend.
-5. Load test: `DRONE_COUNT=150 SEND_INTERVAL=100ms docker compose up -d simulator` pushes ~1500 msg/s through the pipeline; watch `/metrics` and consumer lag, then restore with `docker compose up -d simulator` (defaults are 10 drones at 500ms).
+5. Open `http://localhost:3000` — Grafana with the provisioned UAV Telemetry Pipeline dashboard (anonymous viewer access; admin password defaults to `admin`). Raw Prometheus is at `http://localhost:9090`.
+6. Load test: `DRONE_COUNT=150 SEND_INTERVAL=100ms docker compose up -d simulator` pushes ~1500 msg/s through the pipeline; watch the ingest rate and queue depth panels in Grafana, then restore with `docker compose up -d simulator` (defaults are 10 drones at 500ms).
 
 Stop everything with `docker compose down` (add `-v` to also wipe database and stream data).
 

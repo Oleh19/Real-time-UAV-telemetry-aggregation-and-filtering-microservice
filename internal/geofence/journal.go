@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
@@ -17,8 +18,13 @@ type BreachRepository interface {
 }
 
 type BreachJournal struct {
-	repo   BreachRepository
-	logger *slog.Logger
+	repo          BreachRepository
+	logger        *slog.Logger
+	recordedTotal atomic.Int64
+}
+
+func (j *BreachJournal) RecordedTotal() int64 {
+	return j.recordedTotal.Load()
 }
 
 func NewBreachJournal(repo BreachRepository, logger *slog.Logger) *BreachJournal {
@@ -54,6 +60,7 @@ func (j *BreachJournal) record(ctx context.Context, msg jetstream.Msg) {
 		}
 		return
 	}
+	j.recordedTotal.Add(1)
 	if err := msg.Ack(); err != nil {
 		j.logger.Error("ack breach message", "error", err)
 	}

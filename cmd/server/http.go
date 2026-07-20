@@ -28,7 +28,8 @@ func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPu
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+	mux.Handle("GET /metrics", newMetricsHandler(ingestor, publisher))
+	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, metricsSnapshot(ingestor, publisher))
 	})

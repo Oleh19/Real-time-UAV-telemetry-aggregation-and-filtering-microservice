@@ -23,6 +23,8 @@ type dependencies struct {
 	checker         *geofence.ZoneChecker
 	zoneIndex       *geofence.RefreshingZoneIndex
 	oblasts         []telemetry.Zone
+	historyWriter   *geofence.HistoryWriter
+	breachJournal   *geofence.BreachJournal
 	historyConsumer jetstream.Consumer
 	zonesConsumer   jetstream.Consumer
 	breachConsumer  jetstream.Consumer
@@ -103,6 +105,8 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 	}
 
 	checker := geofence.NewZoneChecker(zoneIndex, natspub.NewPublisher(js), logger)
+	historyWriter := geofence.NewHistoryWriter(repo, logger)
+	breachJournal := geofence.NewBreachJournal(repo, logger)
 
 	return &dependencies{
 		pool:            pool,
@@ -111,6 +115,8 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		checker:         checker,
 		zoneIndex:       zoneIndex,
 		oblasts:         oblasts,
+		historyWriter:   historyWriter,
+		breachJournal:   breachJournal,
 		historyConsumer: historyConsumer,
 		zonesConsumer:   zonesConsumer,
 		breachConsumer:  breachConsumer,

@@ -62,7 +62,7 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
-	runErr := runConsumers(ctx, deps, cfg, logger)
+	runErr := runConsumers(ctx, deps, cfg)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -76,19 +76,19 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence, logger *slog.Logger) error {
+func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence) error {
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
 
 	errCh := make(chan error, 3)
 	go func() {
-		errCh <- geofence.NewHistoryWriter(deps.repo, logger).Run(runCtx, deps.historyConsumer, cfg.BatchSize, cfg.FlushInterval)
+		errCh <- deps.historyWriter.Run(runCtx, deps.historyConsumer, cfg.BatchSize, cfg.FlushInterval)
 	}()
 	go func() {
 		errCh <- deps.checker.Run(runCtx, deps.zonesConsumer, cfg.WorkerCount, cfg.QueueSize)
 	}()
 	go func() {
-		errCh <- geofence.NewBreachJournal(deps.repo, logger).Run(runCtx, deps.breachConsumer)
+		errCh <- deps.breachJournal.Run(runCtx, deps.breachConsumer)
 	}()
 
 	var runErr error

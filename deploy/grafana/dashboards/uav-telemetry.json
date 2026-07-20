@@ -1,0 +1,144 @@
+{
+  "uid": "uav-telemetry",
+  "title": "UAV Telemetry Pipeline",
+  "tags": ["uav"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Ingest rate (samples/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(uav_ingest_received_total[1m])",
+          "legendFormat": "received"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(uav_ingest_published_total[1m])",
+          "legendFormat": "published"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(uav_history_samples_written_total[1m])",
+          "legendFormat": "written to history"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Losses and rejections (samples/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(uav_ingest_dropped_total[1m])",
+          "legendFormat": "dropped"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(uav_ingest_rejected_total[1m])",
+          "legendFormat": "rejected"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(uav_ingest_failed_total[1m])",
+          "legendFormat": "failed"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tracked drones",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "uav_tracked_drones" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Alarmed zones",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [{ "refId": "A", "expr": "uav_alarmed_zones" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Ingest queue depth",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "uav_ingest_queue_depth", "legendFormat": "depth" },
+        { "refId": "B", "expr": "uav_ingest_queue_capacity", "legendFormat": "capacity" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Zone breach events (events/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(uav_zone_entries_total[5m])",
+          "legendFormat": "entries"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(uav_zone_exits_total[5m])",
+          "legendFormat": "exits"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(uav_breaches_recorded_total[5m])",
+          "legendFormat": "recorded to journal"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Go runtime",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "go_goroutines",
+          "legendFormat": "goroutines {{job}}"
+        },
+        {
+          "refId": "B",
+          "expr": "go_memstats_heap_alloc_bytes / 1024 / 1024",
+          "legendFormat": "heap MiB {{job}}"
+        }
+      ]
+    }
+  ]
+}

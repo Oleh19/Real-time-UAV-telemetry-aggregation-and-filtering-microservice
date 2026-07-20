@@ -54,6 +54,23 @@ func NewIngestor(publisher Publisher, logger *slog.Logger, queueSize int, stateT
 	}
 }
 
+func (i *Ingestor) QueueDepth() int {
+	return len(i.queue)
+}
+
+func (i *Ingestor) QueueCapacity() int {
+	return cap(i.queue)
+}
+
+func (i *Ingestor) TrackedDrones() int {
+	count := 0
+	i.lastState.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	return count
+}
+
 func (i *Ingestor) Start(ctx context.Context, workerCount int) {
 	for range workerCount {
 		i.wg.Go(func() { i.worker(ctx) })

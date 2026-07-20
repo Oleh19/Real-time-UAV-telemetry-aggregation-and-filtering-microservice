@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -21,8 +22,13 @@ const (
 )
 
 type HistoryWriter struct {
-	repo   HistoryRepository
-	logger *slog.Logger
+	repo         HistoryRepository
+	logger       *slog.Logger
+	writtenTotal atomic.Int64
+}
+
+func (h *HistoryWriter) WrittenTotal() int64 {
+	return h.writtenTotal.Load()
 }
 
 func NewHistoryWriter(repo HistoryRepository, logger *slog.Logger) *HistoryWriter {
@@ -101,6 +107,7 @@ func (h *HistoryWriter) flush(ctx context.Context, batch []jetstream.Msg) {
 		}
 		return
 	}
+	h.writtenTotal.Add(int64(len(samples)))
 	for _, msg := range valid {
 		if err := msg.Ack(); err != nil {
 			h.logger.Error("ack history message", "error", err)
