@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,10 +16,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"uavmonitor/gen/telemetryv1"
 	"uavmonitor/internal/config"
+	"uavmonitor/internal/mtls"
 	"uavmonitor/internal/simulator"
 )
 
@@ -39,9 +40,13 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	transportCreds, secure, err := mtls.DialCredentials(mtls.FilesFromEnv(), serverName(cfg.ServerAddr))
+	if err != nil {
+		return err
+	}
+	dialOpts := []grpc.DialOption{transportCreds}
 	if cfg.IngestToken != "" {
-		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(ingestToken(cfg.IngestToken)))
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(ingestToken{token: cfg.IngestToken, secure: secure}))
 	}
 	conn, err := grpc.NewClient(cfg.ServerAddr, dialOpts...)
 	if err != nil {
@@ -81,13 +86,23 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-type ingestToken string
-
-func (t ingestToken) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{"authorization": "Bearer " + string(t)}, nil
+type ingestToken struct {
+	token  string
+	secure bool
 }
 
-func (ingestToken) RequireTransportSecurity() bool { return false }
+func (t ingestToken) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer " + t.token}, nil
+}
+
+func (t ingestToken) RequireTransportSecurity() bool { return t.secure }
+
+func serverName(addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
+}
 
 func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
 	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(slot)))

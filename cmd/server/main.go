@@ -24,6 +24,7 @@ import (
 	"uavmonitor/internal/env"
 	"uavmonitor/internal/fusion"
 	"uavmonitor/internal/health"
+	"uavmonitor/internal/mtls"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/stations"
 	"uavmonitor/internal/tracing"
@@ -90,7 +91,7 @@ func run(logger *slog.Logger) error {
 	if cfg.IngestToken == "" {
 		logger.Warn("ingest authentication disabled: set INGEST_TOKEN to require a token")
 	}
-	grpcServer := grpc.NewServer(
+	serverOpts := []grpc.ServerOption{
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.StreamInterceptor(grpcdelivery.StreamAuthInterceptor(cfg.IngestToken)),
 		grpc.MaxRecvMsgSize(maxIngestMessageBytes),
@@ -103,7 +104,19 @@ func run(logger *slog.Logger) error {
 			Timeout: 20 * time.Second,
 		}),
 		grpc.MaxConcurrentStreams(512),
-	)
+	}
+	tlsFiles := mtls.FilesFromEnv()
+	if tlsFiles.ServerEnabled() {
+		creds, err := mtls.ServerCredentials(tlsFiles)
+		if err != nil {
+			return err
+		}
+		serverOpts = append(serverOpts, grpc.Creds(creds))
+		logger.Info("grpc mutual TLS enabled")
+	} else {
+		logger.Warn("grpc transport is plaintext: set TLS_CA_CERT/TLS_SERVER_CERT/TLS_SERVER_KEY to require client certificates")
+	}
+	grpcServer := grpc.NewServer(serverOpts...)
 	telemetryv1.RegisterTelemetryServiceServer(grpcServer, grpcdelivery.NewHandler(ingestor, hub, logger))
 
 	listener, err := net.Listen("tcp", cfg.GRPCAddr)

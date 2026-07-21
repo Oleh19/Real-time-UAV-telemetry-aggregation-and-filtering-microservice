@@ -1,4 +1,13 @@
 services:
+  certs:
+    build: .
+    user: '0:0'
+    entrypoint: ['/usr/local/bin/certgen', '-dir', '/certs', '-server-names', 'server,localhost']
+    volumes:
+      - certs:/certs
+    security_opt:
+      - no-new-privileges:true
+
   postgres:
     image: postgis/postgis:16-3.4
     environment:
@@ -45,12 +54,19 @@ services:
       STATE_TTL: '30s'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+      TLS_CA_CERT: '/certs/ca.crt'
+      TLS_SERVER_CERT: '/certs/server.crt'
+      TLS_SERVER_KEY: '/certs/server.key'
+    volumes:
+      - certs:/certs:ro
     ports:
       - '50051:50051'
       - '8080:8080'
     depends_on:
       nats:
         condition: service_healthy
+      certs:
+        condition: service_completed_successfully
     healthcheck:
       test: ['CMD', '/usr/local/bin/server', '-healthcheck']
       interval: 10s
@@ -84,6 +100,11 @@ services:
       INGEST_SERVER_ADDR: 'server:50051'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+      TLS_CA_CERT: '/certs/ca.crt'
+      TLS_CLIENT_CERT: '/certs/client.crt'
+      TLS_CLIENT_KEY: '/certs/client.key'
+    volumes:
+      - certs:/certs:ro
     ports:
       - '8081:8081'
     depends_on:
@@ -91,6 +112,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      certs:
+        condition: service_completed_successfully
     healthcheck:
       test: ['CMD', '/usr/local/bin/geofence', '-healthcheck']
       interval: 10s
@@ -135,9 +158,16 @@ services:
       SWARM_SIZE: '${SWARM_SIZE:-4}'
       SEND_INTERVAL: '${SEND_INTERVAL:-500ms}'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
+      TLS_CA_CERT: '/certs/ca.crt'
+      TLS_CLIENT_CERT: '/certs/client.crt'
+      TLS_CLIENT_KEY: '/certs/client.key'
+    volumes:
+      - certs:/certs:ro
     depends_on:
       server:
         condition: service_healthy
+      certs:
+        condition: service_completed_successfully
     read_only: true
     tmpfs:
       - /tmp
@@ -211,3 +241,4 @@ volumes:
   natsdata:
   promdata:
   grafanadata:
+  certs:
