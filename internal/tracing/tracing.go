@@ -3,6 +3,8 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -13,7 +15,22 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
-const shutdownTimeout = 5 * time.Second
+const (
+	shutdownTimeout    = 5 * time.Second
+	defaultSampleRatio = 0.1
+)
+
+func sampleRatio() (float64, error) {
+	raw, ok := os.LookupEnv("OTEL_TRACE_SAMPLE_RATIO")
+	if !ok || raw == "" {
+		return defaultSampleRatio, nil
+	}
+	ratio, err := strconv.ParseFloat(raw, 64)
+	if err != nil || ratio < 0 || ratio > 1 {
+		return 0, fmt.Errorf("parse OTEL_TRACE_SAMPLE_RATIO: must be a number within [0, 1], got %q", raw)
+	}
+	return ratio, nil
+}
 
 func Setup(ctx context.Context, serviceName, endpoint string) (func(), error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
@@ -32,7 +49,12 @@ func Setup(ctx context.Context, serviceName, endpoint string) (func(), error) {
 		return nil, fmt.Errorf("create otlp trace exporter: %w", err)
 	}
 
+	ratio, err := sampleRatio()
+	if err != nil {
+		return nil, err
+	}
 	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))),
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,

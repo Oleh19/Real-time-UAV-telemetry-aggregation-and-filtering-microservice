@@ -26,6 +26,7 @@ const (
 	MaxSpeed             = 1000.0
 	DefaultSpeed         = 10.0
 	DefaultMaxConcurrent = 4
+	maxFinishedRuns      = 20
 )
 
 type HistorySource interface {
@@ -163,6 +164,7 @@ func (m *Manager) Start(ctx context.Context, req Request) (Status, error) {
 		cancel: cancel,
 	}
 	m.runs[id] = active
+	m.pruneFinishedLocked()
 	m.mu.Unlock()
 
 	m.logger.Info("replay started",
@@ -245,6 +247,22 @@ func (m *Manager) ActiveReplays() int {
 
 func (m *Manager) SamplesReplayed() int64 {
 	return m.samplesReplayed.Load()
+}
+
+func (m *Manager) pruneFinishedLocked() {
+	var finished []string
+	for id, active := range m.runs {
+		if active.snapshot().State != StateRunning {
+			finished = append(finished, id)
+		}
+	}
+	if len(finished) <= maxFinishedRuns {
+		return
+	}
+	sort.Strings(finished)
+	for _, id := range finished[:len(finished)-maxFinishedRuns] {
+		delete(m.runs, id)
+	}
 }
 
 func (m *Manager) runningLocked() int {

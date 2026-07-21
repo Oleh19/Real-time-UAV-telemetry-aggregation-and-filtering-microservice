@@ -190,6 +190,39 @@ func TestReplayValidatesRequests(t *testing.T) {
 	}
 }
 
+func TestReplayPrunesFinishedRunsBeyondCap(t *testing.T) {
+	base := time.Now().Add(-time.Hour)
+	source := &fakeSource{samples: recordedTrack(base, 1, 2)}
+	manager := replay.NewManager(source, &capturingPublisher{}, discardLogger(), 4, 0)
+	defer manager.Close()
+
+	var lastID string
+	for range 30 {
+		status, err := manager.Start(context.Background(), replay.Request{From: base, To: base.Add(time.Minute), Speed: 1000})
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		lastID = status.ID
+		if !waitState(manager, status.ID, replay.StateCompleted) {
+			t.Fatalf("replay %s never completed", status.ID)
+		}
+	}
+
+	statuses := manager.List()
+	if len(statuses) > 21 {
+		t.Fatalf("List returned %d runs, want finished runs pruned to at most 20 plus running", len(statuses))
+	}
+	found := false
+	for _, status := range statuses {
+		if status.ID == lastID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("most recent replay was pruned instead of the oldest")
+	}
+}
+
 func TestReplayCloseCancelsEverything(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 	source := &fakeSource{samples: recordedTrack(base, 500, 100)}
