@@ -22,6 +22,7 @@ type Simulator struct {
 	DroneCount        int
 	StationCount      int
 	ObservationNoiseM int
+	SwarmSize         int
 	SendInterval      time.Duration
 	IngestToken       string
 }
@@ -93,11 +94,16 @@ func LoadSimulator() (Simulator, error) {
 	if err != nil {
 		return Simulator{}, err
 	}
+	swarmSize, err := env.Int("SWARM_SIZE", 4)
+	if err != nil {
+		return Simulator{}, err
+	}
 	cfg := Simulator{
 		ServerAddr:        env.String("SERVER_ADDR", "localhost:50051"),
 		DroneCount:        droneCount,
 		StationCount:      stationCount,
 		ObservationNoiseM: observationNoise,
+		SwarmSize:         swarmSize,
 		SendInterval:      sendInterval,
 		IngestToken:       env.String("INGEST_TOKEN", ""),
 	}
@@ -109,6 +115,9 @@ func LoadSimulator() (Simulator, error) {
 	}
 	if cfg.ObservationNoiseM < 0 {
 		return Simulator{}, fmt.Errorf("validate OBS_NOISE_METERS: must be >= 0, got %d", cfg.ObservationNoiseM)
+	}
+	if cfg.SwarmSize != 0 && (cfg.SwarmSize < 2 || cfg.SwarmSize > 12) {
+		return Simulator{}, fmt.Errorf("validate SWARM_SIZE: must be 0 to disable or within [2, 12], got %d", cfg.SwarmSize)
 	}
 	if cfg.SendInterval < 10*time.Millisecond {
 		return Simulator{}, fmt.Errorf("validate SEND_INTERVAL: must be >= 10ms, got %s", cfg.SendInterval)

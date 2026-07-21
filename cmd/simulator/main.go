@@ -70,6 +70,11 @@ func run(logger *slog.Logger) error {
 			runDroneSlot(ctx, client, cfg, slot, &droneIDs, logger)
 		})
 	}
+	if cfg.SwarmSize >= 2 {
+		wg.Go(func() {
+			runSwarmSlot(ctx, client, cfg, &droneIDs, logger)
+		})
+	}
 	wg.Wait()
 
 	logger.Info("simulator stopped")
@@ -111,31 +116,108 @@ type stationLink struct {
 	stream  telemetryv1.TelemetryService_StreamTelemetryClient
 }
 
-func flyThroughStations(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, drone *simulator.Drone, rng *rand.Rand, logger *slog.Logger) error {
+func openStationLinks(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, rng *rand.Rand, logger *slog.Logger) ([]stationLink, error) {
 	links := make([]stationLink, 0, cfg.StationCount)
 	for n := 1; n <= cfg.StationCount; n++ {
 		stream, err := client.StreamTelemetry(ctx)
 		if err != nil {
-			closeLinks(links, drone.ID(), logger)
-			return fmt.Errorf("open stream for %s: %w", drone.ID(), err)
+			closeLinks(links, "unopened", logger)
+			return nil, fmt.Errorf("open station stream: %w", err)
 		}
 		links = append(links, stationLink{
 			station: simulator.NewStation(n, cfg.ObservationNoiseM, rng),
 			stream:  stream,
 		})
 	}
+	return links, nil
+}
+
+func sendThroughLinks(links []stationLink, truth *telemetryv1.DroneTelemetry) error {
+	for _, link := range links {
+		if err := link.stream.Send(link.station.Observe(truth)); err != nil {
+			return fmt.Errorf("station %s send: %w", link.station.ID(), err)
+		}
+	}
+	return nil
+}
+
+func flyThroughStations(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, drone *simulator.Drone, rng *rand.Rand, logger *slog.Logger) error {
+	links, err := openStationLinks(ctx, client, cfg, rng, logger)
+	if err != nil {
+		return fmt.Errorf("open streams for %s: %w", drone.ID(), err)
+	}
 
 	emit := func(truth *telemetryv1.DroneTelemetry) error {
-		for _, link := range links {
-			if err := link.stream.Send(link.station.Observe(truth)); err != nil {
-				return fmt.Errorf("station %s send: %w", link.station.ID(), err)
+		return sendThroughLinks(links, truth)
+	}
+
+	flyErr := drone.Fly(ctx, cfg.SendInterval, emit, logger)
+	closeLinks(links, drone.ID(), logger)
+	return flyErr
+}
+
+func runSwarmSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, droneIDs *atomic.Int64, logger *slog.Logger) {
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0x5747524d))
+	for {
+		respawnDelay := time.Duration(5+rng.IntN(25)) * time.Second
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(respawnDelay):
+		}
+		leader := simulator.NewDrone(int(droneIDs.Add(1)), rng)
+		members := make([]*simulator.SwarmMember, 0, cfg.SwarmSize-1)
+		for range cfg.SwarmSize - 1 {
+			members = append(members, simulator.NewSwarmMember(int(droneIDs.Add(1)), rng))
+		}
+		logger.Info("swarm launched", "leader", leader.ID(), "size", cfg.SwarmSize)
+		if err := flySwarm(ctx, client, cfg, leader, members, rng, logger); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Warn("swarm stream failed", "leader", leader.ID(), "error", err)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+func flySwarm(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, leader *simulator.Drone, members []*simulator.SwarmMember, rng *rand.Rand, logger *slog.Logger) error {
+	leaderLinks, err := openStationLinks(ctx, client, cfg, rng, logger)
+	if err != nil {
+		return fmt.Errorf("open streams for swarm leader %s: %w", leader.ID(), err)
+	}
+	memberLinks := make([][]stationLink, 0, len(members))
+	for _, member := range members {
+		links, err := openStationLinks(ctx, client, cfg, rng, logger)
+		if err != nil {
+			closeLinks(leaderLinks, leader.ID(), logger)
+			for n, opened := range memberLinks {
+				closeLinks(opened, members[n].ID(), logger)
+			}
+			return fmt.Errorf("open streams for swarm member %s: %w", member.ID(), err)
+		}
+		memberLinks = append(memberLinks, links)
+	}
+
+	emit := func(truth *telemetryv1.DroneTelemetry) error {
+		if err := sendThroughLinks(leaderLinks, truth); err != nil {
+			return err
+		}
+		for n, member := range members {
+			if err := sendThroughLinks(memberLinks[n], member.Follow(truth)); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
 
-	flyErr := drone.Fly(ctx, cfg.SendInterval, emit, logger)
-	closeLinks(links, drone.ID(), logger)
+	flyErr := leader.Fly(ctx, cfg.SendInterval, emit, logger)
+	closeLinks(leaderLinks, leader.ID(), logger)
+	for n, links := range memberLinks {
+		closeLinks(links, members[n].ID(), logger)
+	}
 	return flyErr
 }
 

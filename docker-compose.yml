@@ -132,6 +132,7 @@ services:
       DRONE_COUNT: '${DRONE_COUNT:-10}'
       STATION_COUNT: '${STATION_COUNT:-3}'
       OBS_NOISE_METERS: '${OBS_NOISE_METERS:-80}'
+      SWARM_SIZE: '${SWARM_SIZE:-4}'
       SEND_INTERVAL: '${SEND_INTERVAL:-500ms}'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
     depends_on:
