@@ -12,6 +12,7 @@ import (
 	"uavmonitor/internal/broadcast"
 	"uavmonitor/internal/classify"
 	"uavmonitor/internal/fusion"
+	"uavmonitor/internal/stations"
 	"uavmonitor/internal/telemetry"
 	"uavmonitor/internal/usecase"
 )
@@ -28,7 +29,7 @@ func TestMetricsHandlerExposesIngestMetrics(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ingestor := usecase.NewIngestor(nopPublisher{}, logger, 8, time.Minute)
 
-	handler := newMetricsHandler(ingestor, fakeFailures(3), fusion.NewFuser(fusion.DefaultConfig()), broadcast.NewHub(8), classify.NewClassifier())
+	handler := newMetricsHandler(ingestor, fakeFailures(3), fusion.NewFuser(fusion.DefaultConfig()), broadcast.NewHub(8), classify.NewClassifier(), stations.NewRegistry(stations.DefaultConfig(), logger))
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest("GET", "/metrics", nil))
 

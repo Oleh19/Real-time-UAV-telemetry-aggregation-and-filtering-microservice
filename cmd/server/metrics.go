@@ -31,7 +31,11 @@ type classifierStats interface {
 	TrackedByClass() map[telemetry.TargetClass]int
 }
 
-func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats, classifier classifierStats) http.Handler {
+type stationStats interface {
+	Counts() (online, silent int)
+}
+
+func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry stationStats) http.Handler {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -65,6 +69,10 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		hub.Delivered)
 	registerCounter(registry, "uav_subscriber_dropped_total", "Samples dropped because a subscriber was too slow.",
 		hub.Dropped)
+	registerGauge(registry, "uav_stations_online", "Detection stations reporting within the online window.",
+		func() int64 { online, _ := stationRegistry.Counts(); return int64(online) })
+	registerGauge(registry, "uav_stations_silent", "Known detection stations that stopped reporting.",
+		func() int64 { _, silent := stationRegistry.Counts(); return int64(silent) })
 	for _, class := range []telemetry.TargetClass{
 		telemetry.ClassLoiteringMunition,
 		telemetry.ClassReconUAV,

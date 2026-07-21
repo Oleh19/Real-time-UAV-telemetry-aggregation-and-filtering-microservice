@@ -25,6 +25,7 @@ import (
 	"uavmonitor/internal/fusion"
 	"uavmonitor/internal/health"
 	"uavmonitor/internal/queue/natspub"
+	"uavmonitor/internal/stations"
 	"uavmonitor/internal/tracing"
 	"uavmonitor/internal/usecase"
 )
@@ -73,11 +74,14 @@ func run(logger *slog.Logger) error {
 	fuser := fusion.NewFuser(fusion.DefaultConfig())
 	hub := broadcast.NewHub(broadcast.DefaultSubscriberBuffer)
 	classifier := classify.NewClassifier()
+	stationRegistry := stations.NewRegistry(stations.DefaultConfig(), logger)
 	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL,
 		usecase.WithResolver(fuser),
 		usecase.WithBroadcaster(hub),
 		usecase.WithClassifier(classifier),
+		usecase.WithStationObserver(stationRegistry),
 	)
+	go stationRegistry.Run(ctx)
 
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
@@ -109,7 +113,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

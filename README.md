@@ -33,6 +33,7 @@ Real-time hostile UAV monitoring system: a detection network streams target trac
 - **Live dashboard** — Leaflet map of Ukraine with heading-oriented target triangles colored by track confidence and oblast boundaries that flash red while alarmed, an air-alert panel listing every oblast, ingest metric tiles with connection status, and a tracked-targets table, refreshed every second.
 - **Observability** — health checks on every service, Prometheus metrics on `/metrics` from both Go services, a provisioned Grafana dashboard (ingest rate, drops, queue depth, breach events, Go runtime), graceful shutdown with drain.
 - **Distributed tracing** — OpenTelemetry spans follow each sample from the gRPC ingest through NATS JetStream into the geofence checks, alert publishing, and journal writes; trace context propagates in message headers and Jaeger collects everything over OTLP.
+- **Sensor network health** — every detection station is tracked as a first-class entity with last-seen time, sample counters, and report rate; stations transition online → stale → offline with log alerts on silence and recovery, the dashboard shows a per-station status panel, and online/silent counts feed alerting metrics via `GET /stations`.
 
 ## Quick start
 

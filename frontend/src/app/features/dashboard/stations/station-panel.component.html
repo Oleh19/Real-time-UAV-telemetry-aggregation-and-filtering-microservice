@@ -1,0 +1,21 @@
+<section class="panel" aria-label="Detection stations">
+  <header class="panel-header">
+    <h2>Stations</h2>
+    <span class="silent-count" [class.silent-count-active]="silentCount() > 0">
+      {{ silentCount() }} silent
+    </span>
+  </header>
+  @if (feed.stations().length > 0) {
+    <ul class="station-list">
+      @for (station of feed.stations(); track station.id) {
+        <li class="station">
+          <span class="station-dot" [attr.data-status]="station.status"></span>
+          <span class="station-id">{{ station.id }}</span>
+          <span class="station-rate">{{ station.ratePerSecond | number: '1.0-0' }}/s</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">No detection stations reporting</p>
+  }
+</section>

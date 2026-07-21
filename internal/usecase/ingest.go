@@ -34,6 +34,10 @@ type Classifier interface {
 	Classify(sample telemetry.Sample) telemetry.TargetClass
 }
 
+type StationObserver interface {
+	Observe(station telemetry.StationID)
+}
+
 type Option func(*Ingestor)
 
 func WithResolver(resolver TrackResolver) Option {
@@ -54,6 +58,12 @@ func WithClassifier(classifier Classifier) Option {
 	}
 }
 
+func WithStationObserver(observer StationObserver) Option {
+	return func(i *Ingestor) {
+		i.stations = observer
+	}
+}
+
 type lastEntry struct {
 	sample   telemetry.Sample
 	storedAt time.Time
@@ -64,6 +74,7 @@ type Ingestor struct {
 	resolver    TrackResolver
 	broadcaster Broadcaster
 	classifier  Classifier
+	stations    StationObserver
 	logger      *slog.Logger
 	queue       chan telemetry.Sample
 	done        chan struct{}
@@ -177,6 +188,9 @@ func (i *Ingestor) Submit(ctx context.Context, sample telemetry.Sample) error {
 	if err := sample.Validate(); err != nil {
 		i.rejected.Add(1)
 		return fmt.Errorf("%w: %w", ErrInvalidSample, err)
+	}
+	if i.stations != nil {
+		i.stations.Observe(sample.StationID)
 	}
 	if i.resolver != nil {
 		sample = i.resolver.Resolve(sample)
