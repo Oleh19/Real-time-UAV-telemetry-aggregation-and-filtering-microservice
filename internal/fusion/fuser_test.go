@@ -1,6 +1,7 @@
 package fusion_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -37,10 +38,10 @@ func TestFuserMergesObservationsFromDifferentStations(t *testing.T) {
 	now := time.Now()
 
 	first := fuser.Resolve(observation("station-01", "s1-t7", 50.0000, 30.0000, now))
-	second := fuser.Resolve(observation("station-02", "s2-t3", 50.0050, 30.0050, now.Add(100*time.Millisecond)))
+	second := fuser.Resolve(observation("station-02", "s2-t3", 50.0009, 30.0006, now.Add(100*time.Millisecond)))
 
 	if first.DroneID != second.DroneID {
-		t.Fatalf("observations 600m apart got different tracks: %s vs %s", first.DroneID, second.DroneID)
+		t.Fatalf("observations ~110m apart got different tracks: %s vs %s", first.DroneID, second.DroneID)
 	}
 	if fuser.ActiveTracks() != 1 {
 		t.Fatalf("ActiveTracks = %d, want 1", fuser.ActiveTracks())
@@ -48,8 +49,8 @@ func TestFuserMergesObservationsFromDifferentStations(t *testing.T) {
 	if fuser.MergesTotal() != 1 {
 		t.Fatalf("MergesTotal = %d, want 1", fuser.MergesTotal())
 	}
-	if second.Latitude <= 50.0000 || second.Latitude >= 50.0050 {
-		t.Errorf("merged latitude = %f, want between the two observations", second.Latitude)
+	if second.Latitude <= 50.0000 || second.Latitude >= 50.0009 {
+		t.Errorf("fused latitude = %f, want the filter estimate between the two observations", second.Latitude)
 	}
 }
 
@@ -68,7 +69,22 @@ func TestFuserKeepsTracksFromSameStationSeparate(t *testing.T) {
 	}
 }
 
-func TestFuserRespectsGateRadius(t *testing.T) {
+func TestFuserMahalanobisGateRejectsDistantObservation(t *testing.T) {
+	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	now := time.Now()
+
+	first := fuser.Resolve(observation("station-01", "s1-t1", 50.000, 30.000, now))
+	second := fuser.Resolve(observation("station-02", "s2-t1", 50.006, 30.000, now.Add(100*time.Millisecond)))
+
+	if first.DroneID == second.DroneID {
+		t.Fatal("observation ~670m away associated despite the Mahalanobis gate")
+	}
+	if fuser.ActiveTracks() != 2 {
+		t.Fatalf("ActiveTracks = %d, want 2 separate tracks", fuser.ActiveTracks())
+	}
+}
+
+func TestFuserRespectsCoarseGateRadius(t *testing.T) {
 	fuser := fusion.NewFuser(fusion.Config{GateRadiusMeters: 1000})
 	now := time.Now()
 
@@ -76,7 +92,7 @@ func TestFuserRespectsGateRadius(t *testing.T) {
 	second := fuser.Resolve(observation("station-02", "s2-t1", 50.05, 30.00, now))
 
 	if first.DroneID == second.DroneID {
-		t.Fatal("observations ~5.5km apart fused despite a 1km gate")
+		t.Fatal("observations ~5.5km apart fused despite a 1km coarse gate")
 	}
 }
 
@@ -86,7 +102,7 @@ func TestFuserKeepsStableIDAcrossUpdates(t *testing.T) {
 
 	first := fuser.Resolve(observation("station-01", "s1-t1", 50.00, 30.00, now))
 	for n := 1; n <= 5; n++ {
-		next := fuser.Resolve(observation("station-01", "s1-t1", 50.00+float64(n)*0.001, 30.00, now.Add(time.Duration(n)*time.Second)))
+		next := fuser.Resolve(observation("station-01", "s1-t1", 50.00+float64(n)*0.0002, 30.00, now.Add(time.Duration(n)*time.Second)))
 		if next.DroneID != first.DroneID {
 			t.Fatalf("update %d changed track id from %s to %s", n, first.DroneID, next.DroneID)
 		}
@@ -115,12 +131,73 @@ func TestFuserMergedConfidenceIsMax(t *testing.T) {
 
 	low := observation("station-01", "s1-t1", 50.0, 30.0, now)
 	low.Confidence = 40
-	high := observation("station-02", "s2-t1", 50.001, 30.001, now)
+	high := observation("station-02", "s2-t1", 50.0008, 30.0005, now)
 	high.Confidence = 95
 
 	fuser.Resolve(low)
 	merged := fuser.Resolve(high)
 	if merged.Confidence != 95 {
 		t.Fatalf("merged confidence = %d, want max 95", merged.Confidence)
+	}
+}
+
+func TestKalmanFilterSmoothsNoisyStraightTrack(t *testing.T) {
+	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	start := time.Now().Add(-time.Minute)
+
+	const (
+		ticks        = 40
+		stepSeconds  = 0.5
+		trueSpeedMps = 60.0
+		noiseMeters  = 90.0
+	)
+	stepDegrees := trueSpeedMps * stepSeconds / 111320.0
+	noiseDegrees := noiseMeters / 111320.0
+
+	var rawErrorSum, fusedErrorSum float64
+	var lastFused telemetry.Sample
+	for n := range ticks {
+		trueLat := 50.0 + float64(n)*stepDegrees
+		noise := noiseDegrees
+		if n%2 == 1 {
+			noise = -noiseDegrees
+		}
+		obs := observation("station-01", "s1-t1", trueLat+noise, 30.0, start.Add(time.Duration(float64(n)*stepSeconds*float64(time.Second))))
+		lastFused = fuser.Resolve(obs)
+		if n >= ticks/2 {
+			rawErrorSum += math.Abs(obs.Latitude - trueLat)
+			fusedErrorSum += math.Abs(lastFused.Latitude - trueLat)
+		}
+	}
+
+	if fusedErrorSum >= rawErrorSum {
+		t.Fatalf("fused error %.6f >= raw error %.6f, filter did not smooth the track", fusedErrorSum, rawErrorSum)
+	}
+	if fusedErrorSum > rawErrorSum/2 {
+		t.Errorf("fused error %.6f is more than half the raw error %.6f, expected stronger smoothing", fusedErrorSum, rawErrorSum)
+	}
+	if lastFused.Speed < 35 || lastFused.Speed > 85 {
+		t.Errorf("estimated speed = %.1f m/s, want near the true 60 m/s", lastFused.Speed)
+	}
+}
+
+func TestKalmanFilterPredictsThroughMissedFrames(t *testing.T) {
+	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	start := time.Now().Add(-time.Minute)
+
+	stepDegrees := 30.0 / 111320.0
+	var track telemetry.DroneID
+	for n := range 10 {
+		fused := fuser.Resolve(observation("station-01", "s1-t1", 50.0+float64(n)*stepDegrees, 30.0, start.Add(time.Duration(n)*time.Second)))
+		track = fused.DroneID
+	}
+
+	resumed := fuser.Resolve(observation("station-01", "s1-t1", 50.0+14*stepDegrees, 30.0, start.Add(14*time.Second)))
+	if resumed.DroneID != track {
+		t.Fatalf("track id changed after a 4s gap: %s vs %s", resumed.DroneID, track)
+	}
+	wantLat := 50.0 + 14*stepDegrees
+	if math.Abs(resumed.Latitude-wantLat)*111320 > 60 {
+		t.Errorf("post-gap estimate is %.1fm from truth, want the filter to have predicted through the gap", math.Abs(resumed.Latitude-wantLat)*111320)
 	}
 }

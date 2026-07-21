@@ -11,16 +11,22 @@ import (
 )
 
 type Config struct {
-	GateRadiusMeters float64
-	TrackTTL         time.Duration
-	MergeWindow      time.Duration
+	GateRadiusMeters  float64
+	GateChiSquared    float64
+	MeasurementNoiseM float64
+	ProcessAccelMps2  float64
+	TrackTTL          time.Duration
+	MergeWindow       time.Duration
 }
 
 func DefaultConfig() Config {
 	return Config{
-		GateRadiusMeters: 3000,
-		TrackTTL:         30 * time.Second,
-		MergeWindow:      3 * time.Second,
+		GateRadiusMeters:  3000,
+		GateChiSquared:    13.82,
+		MeasurementNoiseM: 100,
+		ProcessAccelMps2:  4,
+		TrackTTL:          30 * time.Second,
+		MergeWindow:       3 * time.Second,
 	}
 }
 
@@ -36,8 +42,8 @@ type observation struct {
 
 type fusedTrack struct {
 	id           telemetry.DroneID
+	filter       *kalmanFilter
 	observations map[observationKey]observation
-	lastSample   telemetry.Sample
 	lastUpdate   time.Time
 }
 
@@ -49,17 +55,28 @@ type Fuser struct {
 	nextTrack     int64
 	lastPrune     time.Time
 	mergesTotal   atomic.Int64
+	gatedTotal    atomic.Int64
 }
 
 func NewFuser(cfg Config) *Fuser {
+	defaults := DefaultConfig()
 	if cfg.GateRadiusMeters <= 0 {
-		cfg.GateRadiusMeters = DefaultConfig().GateRadiusMeters
+		cfg.GateRadiusMeters = defaults.GateRadiusMeters
+	}
+	if cfg.GateChiSquared <= 0 {
+		cfg.GateChiSquared = defaults.GateChiSquared
+	}
+	if cfg.MeasurementNoiseM <= 0 {
+		cfg.MeasurementNoiseM = defaults.MeasurementNoiseM
+	}
+	if cfg.ProcessAccelMps2 <= 0 {
+		cfg.ProcessAccelMps2 = defaults.ProcessAccelMps2
 	}
 	if cfg.TrackTTL <= 0 {
-		cfg.TrackTTL = DefaultConfig().TrackTTL
+		cfg.TrackTTL = defaults.TrackTTL
 	}
 	if cfg.MergeWindow <= 0 {
-		cfg.MergeWindow = DefaultConfig().MergeWindow
+		cfg.MergeWindow = defaults.MergeWindow
 	}
 	return &Fuser{
 		cfg:           cfg,
@@ -79,50 +96,56 @@ func (f *Fuser) Resolve(sample telemetry.Sample) telemetry.Sample {
 	defer f.mu.Unlock()
 	f.pruneLocked(now)
 
-	track := f.trackForLocked(key, sample, now)
+	track, isNew := f.trackForLocked(key, sample, now)
+	if !isNew {
+		track.filter.update(sample.Latitude, sample.Longitude, sample.Timestamp)
+	}
 	track.observations[key] = observation{sample: sample, seenAt: now}
 	track.lastUpdate = now
-	track.lastSample = f.mergeLocked(track, now)
-	return track.lastSample
+	return f.fusedSampleLocked(track, sample.Timestamp, now)
 }
 
-func (f *Fuser) trackForLocked(key observationKey, sample telemetry.Sample, now time.Time) *fusedTrack {
+func (f *Fuser) trackForLocked(key observationKey, sample telemetry.Sample, now time.Time) (*fusedTrack, bool) {
 	if id, ok := f.byObservation[key]; ok {
 		if track, alive := f.tracks[id]; alive {
-			return track
+			return track, false
 		}
 		delete(f.byObservation, key)
 	}
-	if track := f.nearestCandidateLocked(key, sample); track != nil {
+	if track := f.bestCandidateLocked(key, sample); track != nil {
 		f.byObservation[key] = track.id
 		f.mergesTotal.Add(1)
-		return track
+		return track, false
 	}
 	f.nextTrack++
 	track := &fusedTrack{
 		id:           telemetry.DroneID(fmt.Sprintf("target-%03d", f.nextTrack)),
+		filter:       newKalmanFilter(sample.Latitude, sample.Longitude, sample.Timestamp, f.cfg.MeasurementNoiseM, f.cfg.ProcessAccelMps2),
 		observations: make(map[observationKey]observation),
 		lastUpdate:   now,
 	}
 	f.tracks[track.id] = track
 	f.byObservation[key] = track.id
-	return track
+	return track, true
 }
 
-func (f *Fuser) nearestCandidateLocked(key observationKey, sample telemetry.Sample) *fusedTrack {
+func (f *Fuser) bestCandidateLocked(key observationKey, sample telemetry.Sample) *fusedTrack {
 	var best *fusedTrack
-	bestDistance := f.cfg.GateRadiusMeters
+	bestDistance := f.cfg.GateChiSquared
 	for _, track := range f.tracks {
 		if f.stationSeesTrackLocked(track, key.station) {
 			continue
 		}
-		distance := distanceMeters(
-			track.lastSample.Latitude, track.lastSample.Longitude,
-			sample.Latitude, sample.Longitude,
-		)
+		latitude, longitude := track.filter.position()
+		if coarseDistanceMeters(latitude, longitude, sample.Latitude, sample.Longitude) > f.cfg.GateRadiusMeters {
+			continue
+		}
+		distance := track.filter.mahalanobisSquared(sample.Latitude, sample.Longitude, sample.Timestamp)
 		if distance <= bestDistance {
 			best = track
 			bestDistance = distance
+		} else if distance > f.cfg.GateChiSquared {
+			f.gatedTotal.Add(1)
 		}
 	}
 	return best
@@ -137,37 +160,32 @@ func (f *Fuser) stationSeesTrackLocked(track *fusedTrack, station telemetry.Stat
 	return false
 }
 
-func (f *Fuser) mergeLocked(track *fusedTrack, now time.Time) telemetry.Sample {
+func (f *Fuser) fusedSampleLocked(track *fusedTrack, timestamp time.Time, now time.Time) telemetry.Sample {
+	latitude, longitude := track.filter.position()
+	fused := telemetry.Sample{
+		DroneID:   track.id,
+		Timestamp: timestamp,
+		Latitude:  latitude,
+		Longitude: longitude,
+		Speed:     float32(track.filter.speed()),
+	}
 	cutoff := now.Add(-f.cfg.MergeWindow)
-	merged := telemetry.Sample{DroneID: track.id}
-	var latSum, lonSum, altSum, speedSum float64
-	count := 0
+	var altitudeSum float64
+	fresh := 0
 	for _, obs := range track.observations {
 		if obs.seenAt.Before(cutoff) {
 			continue
 		}
-		latSum += obs.sample.Latitude
-		lonSum += obs.sample.Longitude
-		altSum += obs.sample.Altitude
-		speedSum += float64(obs.sample.Speed)
-		if obs.sample.Confidence > merged.Confidence {
-			merged.Confidence = obs.sample.Confidence
+		altitudeSum += obs.sample.Altitude
+		if obs.sample.Confidence > fused.Confidence {
+			fused.Confidence = obs.sample.Confidence
 		}
-		if obs.sample.Timestamp.After(merged.Timestamp) {
-			merged.Timestamp = obs.sample.Timestamp
-		}
-		count++
+		fresh++
 	}
-	if count == 0 {
-		merged = track.lastSample
-		merged.DroneID = track.id
-		return merged
+	if fresh > 0 {
+		fused.Altitude = altitudeSum / float64(fresh)
 	}
-	merged.Latitude = latSum / float64(count)
-	merged.Longitude = lonSum / float64(count)
-	merged.Altitude = altSum / float64(count)
-	merged.Speed = float32(speedSum / float64(count))
-	return merged
+	return fused
 }
 
 func (f *Fuser) pruneLocked(now time.Time) {
@@ -199,9 +217,12 @@ func (f *Fuser) MergesTotal() int64 {
 	return f.mergesTotal.Load()
 }
 
-func distanceMeters(lat1, lon1, lat2, lon2 float64) float64 {
-	const metersPerDegree = 111320.0
-	dLat := (lat2 - lat1) * metersPerDegree
-	dLon := (lon2 - lon1) * metersPerDegree * math.Cos(lat1*math.Pi/180)
+func (f *Fuser) GatedTotal() int64 {
+	return f.gatedTotal.Load()
+}
+
+func coarseDistanceMeters(lat1, lon1, lat2, lon2 float64) float64 {
+	dLat := (lat2 - lat1) * metersPerDegreeEquator
+	dLon := (lon2 - lon1) * metersPerDegreeEquator * math.Cos(lat1*math.Pi/180)
 	return math.Hypot(dLat, dLon)
 }

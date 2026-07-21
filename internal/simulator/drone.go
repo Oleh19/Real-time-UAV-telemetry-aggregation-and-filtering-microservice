@@ -18,11 +18,12 @@ const (
 	ukraineMaxLatitude  = 52.4
 	ukraineMinLongitude = 22.1
 	ukraineMaxLongitude = 40.2
-	spawnMinOffset      = 0.3
-	spawnMaxOffset      = 1.5
-	minStepDegrees      = 0.006
-	maxStepDegrees      = 0.016
-	meanLifetime        = 3 * time.Minute
+	spawnMinOffset      = 0.15
+	spawnMaxOffset      = 0.7
+	minStepDegrees      = 0.0008
+	maxStepDegrees      = 0.002
+	wanderJitterDegrees = 0.0002
+	meanLifetime        = 4 * time.Minute
 )
 
 type Drone struct {
@@ -73,7 +74,8 @@ func (d *Drone) pickWaypoint() {
 	d.waypointLongitude = ukraineMinLongitude + d.rng.Float64()*(ukraineMaxLongitude-ukraineMinLongitude)
 }
 
-func (d *Drone) advance() *telemetryv1.DroneTelemetry {
+func (d *Drone) advance(interval time.Duration) *telemetryv1.DroneTelemetry {
+	previousLatitude, previousLongitude := d.latitude, d.longitude
 	step := minStepDegrees + d.rng.Float64()*(maxStepDegrees-minStepDegrees)
 	deltaLatitude := d.waypointLatitude - d.latitude
 	deltaLongitude := d.waypointLongitude - d.longitude
@@ -83,17 +85,20 @@ func (d *Drone) advance() *telemetryv1.DroneTelemetry {
 		d.longitude = d.waypointLongitude
 		d.pickWaypoint()
 	} else {
-		d.latitude += deltaLatitude/distance*step + d.rng.Float64()*0.002 - 0.001
-		d.longitude += deltaLongitude/distance*step + d.rng.Float64()*0.002 - 0.001
+		d.latitude += deltaLatitude/distance*step + d.rng.Float64()*2*wanderJitterDegrees - wanderJitterDegrees
+		d.longitude += deltaLongitude/distance*step + d.rng.Float64()*2*wanderJitterDegrees - wanderJitterDegrees
 	}
 
 	d.altitude += d.rng.Float64()*10 - 5
 	if d.altitude < 50 {
 		d.altitude = 50
 	}
-	d.speed += d.rng.Float32()*2 - 1
-	if d.speed < 0 {
-		d.speed = 0
+	movedMeters := math.Hypot(
+		(d.latitude-previousLatitude)*metersPerDegree,
+		(d.longitude-previousLongitude)*metersPerDegree*math.Cos(previousLatitude*math.Pi/180),
+	)
+	if seconds := interval.Seconds(); seconds > 0 {
+		d.speed = float32(movedMeters / seconds)
 	}
 	d.confidence += d.rng.Int32N(9) - 4
 	if d.confidence < 10 {
@@ -135,7 +140,7 @@ func (d *Drone) Fly(ctx context.Context, interval time.Duration, emit func(*tele
 				)
 				return nil
 			}
-			if err := emit(d.advance()); err != nil {
+			if err := emit(d.advance(interval)); err != nil {
 				return fmt.Errorf("emit telemetry for %s: %w", d.id, err)
 			}
 		}

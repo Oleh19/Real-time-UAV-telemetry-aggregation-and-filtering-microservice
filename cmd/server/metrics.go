@@ -17,6 +17,7 @@ type publishFailureCounter interface {
 type fusionStats interface {
 	ActiveTracks() int
 	MergesTotal() int64
+	GatedTotal() int64
 }
 
 type hubStats interface {
@@ -51,6 +52,8 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		func() int64 { return int64(fuser.ActiveTracks()) })
 	registerCounter(registry, "uav_fusion_merges_total", "Cross-station observations associated to an existing track.",
 		fuser.MergesTotal)
+	registerCounter(registry, "uav_fusion_gated_total", "Candidate associations rejected by the Mahalanobis gate.",
+		fuser.GatedTotal)
 	registerGauge(registry, "uav_subscribers", "Active SubscribeTelemetry streams.",
 		func() int64 { return int64(hub.Subscribers()) })
 	registerCounter(registry, "uav_subscriber_delivered_total", "Samples delivered to subscribers.",
