@@ -207,6 +207,7 @@ func decodeSample(payload []byte, logger *slog.Logger) (telemetry.Sample, bool) 
 	}
 	return telemetry.Sample{
 		DroneID:    telemetry.DroneID(pb.GetDroneId()),
+		Class:      telemetry.TargetClass(pb.GetClassification()),
 		Timestamp:  pb.GetTimestamp().AsTime(),
 		Latitude:   pb.GetLatitude(),
 		Longitude:  pb.GetLongitude(),

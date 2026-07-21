@@ -8,6 +8,7 @@
       <thead>
         <tr>
           <th scope="col">Target</th>
+          <th scope="col">Class</th>
           <th scope="col">Alt, m</th>
           <th scope="col">Speed, m/s</th>
           <th scope="col">Track</th>
@@ -18,6 +19,14 @@
         @for (row of rows(); track row.DroneID) {
           <tr>
             <td>{{ row.DroneID }}</td>
+            <td>
+              <span
+                class="target-class"
+                [class.target-class-threat]="row.Class === 'loitering-munition'"
+              >
+                {{ row.Class || 'unknown' }}
+              </span>
+            </td>
             <td>{{ row.Altitude | number: '1.0-0' }}</td>
             <td>{{ row.Speed | number: '1.1-1' }}</td>
             <td>

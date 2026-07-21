@@ -18,6 +18,7 @@ import (
 
 	"uavmonitor/gen/telemetryv1"
 	"uavmonitor/internal/broadcast"
+	"uavmonitor/internal/classify"
 	"uavmonitor/internal/config"
 	grpcdelivery "uavmonitor/internal/delivery/grpc"
 	"uavmonitor/internal/env"
@@ -71,9 +72,11 @@ func run(logger *slog.Logger) error {
 	}
 	fuser := fusion.NewFuser(fusion.DefaultConfig())
 	hub := broadcast.NewHub(broadcast.DefaultSubscriberBuffer)
+	classifier := classify.NewClassifier()
 	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL,
 		usecase.WithResolver(fuser),
 		usecase.WithBroadcaster(hub),
+		usecase.WithClassifier(classifier),
 	)
 
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
@@ -106,7 +109,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

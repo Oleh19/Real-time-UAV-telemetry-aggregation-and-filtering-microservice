@@ -30,6 +30,10 @@ type Broadcaster interface {
 	Broadcast(sample telemetry.Sample)
 }
 
+type Classifier interface {
+	Classify(sample telemetry.Sample) telemetry.TargetClass
+}
+
 type Option func(*Ingestor)
 
 func WithResolver(resolver TrackResolver) Option {
@@ -44,6 +48,12 @@ func WithBroadcaster(broadcaster Broadcaster) Option {
 	}
 }
 
+func WithClassifier(classifier Classifier) Option {
+	return func(i *Ingestor) {
+		i.classifier = classifier
+	}
+}
+
 type lastEntry struct {
 	sample   telemetry.Sample
 	storedAt time.Time
@@ -53,6 +63,7 @@ type Ingestor struct {
 	publisher   Publisher
 	resolver    TrackResolver
 	broadcaster Broadcaster
+	classifier  Classifier
 	logger      *slog.Logger
 	queue       chan telemetry.Sample
 	done        chan struct{}
@@ -169,6 +180,9 @@ func (i *Ingestor) Submit(ctx context.Context, sample telemetry.Sample) error {
 	}
 	if i.resolver != nil {
 		sample = i.resolver.Resolve(sample)
+	}
+	if i.classifier != nil {
+		sample.Class = i.classifier.Classify(sample)
 	}
 	i.storeLastKnown(sample)
 	select {

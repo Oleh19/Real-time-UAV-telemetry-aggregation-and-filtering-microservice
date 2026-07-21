@@ -20,14 +20,27 @@ const (
 	ukraineMaxLongitude = 40.2
 	spawnMinOffset      = 0.15
 	spawnMaxOffset      = 0.7
-	minStepDegrees      = 0.0008
-	maxStepDegrees      = 0.002
-	wanderJitterDegrees = 0.0002
 	meanLifetime        = 4 * time.Minute
 )
 
+type flightProfile struct {
+	name           string
+	minStepDegrees float64
+	maxStepDegrees float64
+	jitterDegrees  float64
+	minAltitude    float64
+	maxAltitude    float64
+}
+
+var flightProfiles = []flightProfile{
+	{name: "strike", minStepDegrees: 0.0015, maxStepDegrees: 0.002, jitterDegrees: 0.00005, minAltitude: 150, maxAltitude: 350},
+	{name: "recon", minStepDegrees: 0.0007, maxStepDegrees: 0.001, jitterDegrees: 0.0002, minAltitude: 300, maxAltitude: 500},
+	{name: "multirotor", minStepDegrees: 0.0002, maxStepDegrees: 0.0004, jitterDegrees: 0.0004, minAltitude: 50, maxAltitude: 150},
+}
+
 type Drone struct {
 	id                string
+	profile           flightProfile
 	latitude          float64
 	longitude         float64
 	waypointLatitude  float64
@@ -40,17 +53,22 @@ type Drone struct {
 
 func NewDrone(index int, rng *rand.Rand) *Drone {
 	latitude, longitude := spawnOutsideUkraine(rng)
+	profile := flightProfiles[rng.IntN(len(flightProfiles))]
 	drone := &Drone{
 		id:         fmt.Sprintf("drone-%03d", index),
+		profile:    profile,
 		latitude:   latitude,
 		longitude:  longitude,
-		altitude:   100 + rng.Float64()*300,
-		speed:      10 + rng.Float32()*30,
+		altitude:   profile.minAltitude + rng.Float64()*(profile.maxAltitude-profile.minAltitude),
 		confidence: 60 + rng.Int32N(41),
 		rng:        rng,
 	}
 	drone.pickWaypoint()
 	return drone
+}
+
+func (d *Drone) Profile() string {
+	return d.profile.name
 }
 
 func spawnOutsideUkraine(rng *rand.Rand) (latitude, longitude float64) {
@@ -76,7 +94,8 @@ func (d *Drone) pickWaypoint() {
 
 func (d *Drone) advance(interval time.Duration) *telemetryv1.DroneTelemetry {
 	previousLatitude, previousLongitude := d.latitude, d.longitude
-	step := minStepDegrees + d.rng.Float64()*(maxStepDegrees-minStepDegrees)
+	step := d.profile.minStepDegrees + d.rng.Float64()*(d.profile.maxStepDegrees-d.profile.minStepDegrees)
+	jitter := d.profile.jitterDegrees
 	deltaLatitude := d.waypointLatitude - d.latitude
 	deltaLongitude := d.waypointLongitude - d.longitude
 	distance := math.Hypot(deltaLatitude, deltaLongitude)
@@ -85,13 +104,13 @@ func (d *Drone) advance(interval time.Duration) *telemetryv1.DroneTelemetry {
 		d.longitude = d.waypointLongitude
 		d.pickWaypoint()
 	} else {
-		d.latitude += deltaLatitude/distance*step + d.rng.Float64()*2*wanderJitterDegrees - wanderJitterDegrees
-		d.longitude += deltaLongitude/distance*step + d.rng.Float64()*2*wanderJitterDegrees - wanderJitterDegrees
+		d.latitude += deltaLatitude/distance*step + d.rng.Float64()*2*jitter - jitter
+		d.longitude += deltaLongitude/distance*step + d.rng.Float64()*2*jitter - jitter
 	}
 
 	d.altitude += d.rng.Float64()*10 - 5
-	if d.altitude < 50 {
-		d.altitude = 50
+	if d.altitude < d.profile.minAltitude {
+		d.altitude = d.profile.minAltitude
 	}
 	movedMeters := math.Hypot(
 		(d.latitude-previousLatitude)*metersPerDegree,

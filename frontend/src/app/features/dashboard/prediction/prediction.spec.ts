@@ -5,6 +5,7 @@ import { etaStepSeconds, firstZoneOnCourse, velocityBetween } from './prediction
 function sample(overrides: Partial<DroneSample> = {}): DroneSample {
   return {
     DroneID: 'drone-001',
+    Class: 'recon-uav',
     Timestamp: '2026-07-21T10:00:00Z',
     Latitude: 50.0,
     Longitude: 30.0,

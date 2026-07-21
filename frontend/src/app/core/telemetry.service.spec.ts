@@ -40,6 +40,7 @@ class FakeEventSource {
 
 const sample: DroneSample = {
   DroneID: 'drone-001',
+  Class: 'recon-uav',
   Timestamp: '2026-07-17T10:00:00Z',
   Latitude: 50.45,
   Longitude: 30.52,

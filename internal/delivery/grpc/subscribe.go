@@ -73,13 +73,14 @@ func (f subscriptionFilter) matches(sample telemetry.Sample) bool {
 
 func sampleToProto(sample telemetry.Sample) *telemetryv1.DroneTelemetry {
 	return &telemetryv1.DroneTelemetry{
-		DroneId:    string(sample.DroneID),
-		StationId:  string(sample.StationID),
-		Timestamp:  timestamppb.New(sample.Timestamp),
-		Latitude:   sample.Latitude,
-		Longitude:  sample.Longitude,
-		Altitude:   sample.Altitude,
-		Speed:      sample.Speed,
-		Confidence: sample.Confidence,
+		DroneId:        string(sample.DroneID),
+		StationId:      string(sample.StationID),
+		Classification: string(sample.Class),
+		Timestamp:      timestamppb.New(sample.Timestamp),
+		Latitude:       sample.Latitude,
+		Longitude:      sample.Longitude,
+		Altitude:       sample.Altitude,
+		Speed:          sample.Speed,
+		Confidence:     sample.Confidence,
 	}
 }

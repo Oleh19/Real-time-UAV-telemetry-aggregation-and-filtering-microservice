@@ -72,17 +72,18 @@ func (BreachEvent) EnumDescriptor() ([]byte, []int) {
 }
 
 type DroneTelemetry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DroneId       string                 `protobuf:"bytes,1,opt,name=drone_id,json=droneId,proto3" json:"drone_id,omitempty"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Latitude      float64                `protobuf:"fixed64,3,opt,name=latitude,proto3" json:"latitude,omitempty"`
-	Longitude     float64                `protobuf:"fixed64,4,opt,name=longitude,proto3" json:"longitude,omitempty"`
-	Altitude      float64                `protobuf:"fixed64,5,opt,name=altitude,proto3" json:"altitude,omitempty"`
-	Speed         float32                `protobuf:"fixed32,6,opt,name=speed,proto3" json:"speed,omitempty"`
-	Confidence    int32                  `protobuf:"varint,7,opt,name=confidence,proto3" json:"confidence,omitempty"`
-	StationId     string                 `protobuf:"bytes,8,opt,name=station_id,json=stationId,proto3" json:"station_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DroneId        string                 `protobuf:"bytes,1,opt,name=drone_id,json=droneId,proto3" json:"drone_id,omitempty"`
+	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Latitude       float64                `protobuf:"fixed64,3,opt,name=latitude,proto3" json:"latitude,omitempty"`
+	Longitude      float64                `protobuf:"fixed64,4,opt,name=longitude,proto3" json:"longitude,omitempty"`
+	Altitude       float64                `protobuf:"fixed64,5,opt,name=altitude,proto3" json:"altitude,omitempty"`
+	Speed          float32                `protobuf:"fixed32,6,opt,name=speed,proto3" json:"speed,omitempty"`
+	Confidence     int32                  `protobuf:"varint,7,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	StationId      string                 `protobuf:"bytes,8,opt,name=station_id,json=stationId,proto3" json:"station_id,omitempty"`
+	Classification string                 `protobuf:"bytes,9,opt,name=classification,proto3" json:"classification,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DroneTelemetry) Reset() {
@@ -167,6 +168,13 @@ func (x *DroneTelemetry) GetConfidence() int32 {
 func (x *DroneTelemetry) GetStationId() string {
 	if x != nil {
 		return x.StationId
+	}
+	return ""
+}
+
+func (x *DroneTelemetry) GetClassification() string {
+	if x != nil {
+		return x.Classification
 	}
 	return ""
 }
@@ -387,7 +395,7 @@ var File_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_v1_telemetry_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x90\x02\n" +
+	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb8\x02\n" +
 	"\x0eDroneTelemetry\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1a\n" +
@@ -399,7 +407,8 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"confidence\x18\a \x01(\x05R\n" +
 	"confidence\x12\x1d\n" +
 	"\n" +
-	"station_id\x18\b \x01(\tR\tstationId\"\x9e\x02\n" +
+	"station_id\x18\b \x01(\tR\tstationId\x12&\n" +
+	"\x0eclassification\x18\t \x01(\tR\x0eclassification\"\x9e\x02\n" +
 	"\n" +
 	"ZoneBreach\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x12\x17\n" +

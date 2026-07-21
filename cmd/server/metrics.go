@@ -7,6 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"uavmonitor/internal/telemetry"
 	"uavmonitor/internal/usecase"
 )
 
@@ -26,7 +27,11 @@ type hubStats interface {
 	Dropped() int64
 }
 
-func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats) http.Handler {
+type classifierStats interface {
+	TrackedByClass() map[telemetry.TargetClass]int
+}
+
+func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats, classifier classifierStats) http.Handler {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -60,6 +65,21 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		hub.Delivered)
 	registerCounter(registry, "uav_subscriber_dropped_total", "Samples dropped because a subscriber was too slow.",
 		hub.Dropped)
+	for _, class := range []telemetry.TargetClass{
+		telemetry.ClassLoiteringMunition,
+		telemetry.ClassReconUAV,
+		telemetry.ClassMultirotor,
+		telemetry.ClassUnknown,
+	} {
+		registry.MustRegister(prometheus.NewGaugeFunc(
+			prometheus.GaugeOpts{
+				Name:        "uav_tracks_by_class",
+				Help:        "Tracks currently classified into each target class.",
+				ConstLabels: prometheus.Labels{"class": string(class)},
+			},
+			func() float64 { return float64(classifier.TrackedByClass()[class]) },
+		))
+	}
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 

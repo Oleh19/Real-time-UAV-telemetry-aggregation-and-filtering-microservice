@@ -80,3 +80,19 @@
   background: color-mix(in srgb, var(--color-danger) 25%, transparent);
   color: var(--color-danger);
 }
+
+.target-class {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.target-class-threat {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  font-weight: 600;
+}

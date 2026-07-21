@@ -12,6 +12,15 @@ type StationID string
 
 type ZoneID int64
 
+type TargetClass string
+
+const (
+	ClassUnknown           TargetClass = "unknown"
+	ClassLoiteringMunition TargetClass = "loitering-munition"
+	ClassReconUAV          TargetClass = "recon-uav"
+	ClassMultirotor        TargetClass = "multirotor"
+)
+
 const (
 	MaxFutureDrift = time.Minute
 	MaxSampleAge   = 24 * time.Hour
@@ -29,6 +38,7 @@ const (
 type Sample struct {
 	DroneID    DroneID
 	StationID  StationID
+	Class      TargetClass
 	Timestamp  time.Time
 	Latitude   float64
 	Longitude  float64

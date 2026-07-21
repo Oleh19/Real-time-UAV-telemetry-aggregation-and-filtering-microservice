@@ -2,6 +2,7 @@ import type { Geometry } from 'geojson';
 
 export interface DroneSample {
   DroneID: string;
+  Class: string;
   Timestamp: string;
   Latitude: number;
   Longitude: number;
