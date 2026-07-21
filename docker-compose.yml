@@ -81,6 +81,8 @@ services:
       FLUSH_INTERVAL: '1s'
       SWARM_RADIUS_METERS: '${SWARM_RADIUS_METERS:-5000}'
       SWARM_MIN_SIZE: '${SWARM_MIN_SIZE:-3}'
+      INGEST_SERVER_ADDR: 'server:50051'
+      INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
     ports:
       - '8081:8081'

@@ -102,6 +102,7 @@ func TestLoadGeofence(t *testing.T) {
 				SwarmRadiusM:      5000,
 				SwarmMinSize:      3,
 				SwarmEvalInterval: 5 * time.Second,
+				IngestServerAddr:  "localhost:50051",
 			},
 		},
 		{

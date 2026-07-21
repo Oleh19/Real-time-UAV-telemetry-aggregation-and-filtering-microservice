@@ -137,6 +137,63 @@ func TestListHistoryReturnsOrderedWindow(t *testing.T) {
 	}
 }
 
+func TestListHistoryRangeAcrossDrones(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	repo := postgres.NewRepository(pool)
+
+	first := telemetry.DroneID("itest-range-001")
+	second := telemetry.DroneID("itest-range-002")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM telemetry_history WHERE drone_id IN ($1, $2)`, string(first), string(second))
+	})
+
+	base := time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
+	var samples []telemetry.Sample
+	for n := range 3 {
+		ts := base.Add(time.Duration(n) * time.Minute)
+		samples = append(samples,
+			telemetry.Sample{DroneID: first, Timestamp: ts, Latitude: 50, Longitude: 30, Altitude: 100, Speed: 20, Confidence: 90},
+			telemetry.Sample{DroneID: second, Timestamp: ts.Add(time.Second), Latitude: 51, Longitude: 31, Altitude: 100, Speed: 20, Confidence: 90},
+		)
+	}
+	if err := repo.SaveHistoryBatch(ctx, samples); err != nil {
+		t.Fatalf("SaveHistoryBatch: %v", err)
+	}
+
+	all, err := repo.ListHistoryRange(ctx, base, base.Add(10*time.Minute), "", 0)
+	if err != nil {
+		t.Fatalf("ListHistoryRange: %v", err)
+	}
+	mine := 0
+	for _, s := range all {
+		if s.DroneID == first || s.DroneID == second {
+			mine++
+		}
+	}
+	if mine != 6 {
+		t.Fatalf("range returned %d of our samples, want 6", mine)
+	}
+	for n := 1; n < len(all); n++ {
+		if all[n].Timestamp.Before(all[n-1].Timestamp) {
+			t.Fatal("range results are not ordered by recorded_at")
+		}
+	}
+
+	filtered, err := repo.ListHistoryRange(ctx, base, base.Add(10*time.Minute), first, 0)
+	if err != nil {
+		t.Fatalf("filtered ListHistoryRange: %v", err)
+	}
+	if len(filtered) != 3 {
+		t.Fatalf("filtered range returned %d samples, want 3", len(filtered))
+	}
+	for _, s := range filtered {
+		if s.DroneID != first {
+			t.Fatalf("filtered range leaked drone %s", s.DroneID)
+		}
+	}
+}
+
 func TestCustomZoneLifecycle(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)

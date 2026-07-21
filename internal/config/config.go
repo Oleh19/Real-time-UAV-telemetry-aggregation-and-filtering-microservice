@@ -38,6 +38,8 @@ type Geofence struct {
 	SwarmRadiusM      int
 	SwarmMinSize      int
 	SwarmEvalInterval time.Duration
+	IngestServerAddr  string
+	IngestToken       string
 }
 
 func LoadServer() (Server, error) {
@@ -159,6 +161,8 @@ func LoadGeofence() (Geofence, error) {
 		SwarmRadiusM:      swarmRadius,
 		SwarmMinSize:      swarmMinSize,
 		SwarmEvalInterval: swarmEvalInterval,
+		IngestServerAddr:  env.String("INGEST_SERVER_ADDR", "localhost:50051"),
+		IngestToken:       env.String("INGEST_TOKEN", ""),
 	}
 	if cfg.WorkerCount < 1 {
 		return Geofence{}, fmt.Errorf("validate WORKER_COUNT: must be >= 1, got %d", cfg.WorkerCount)

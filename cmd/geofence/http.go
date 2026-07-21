@@ -54,6 +54,9 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /custom-zones", listCustomZonesHandler(deps, logger))
 	mux.HandleFunc("POST /custom-zones", createCustomZoneHandler(deps, logger))
 	mux.HandleFunc("DELETE /custom-zones/{id}", deleteCustomZoneHandler(deps, logger))
+	mux.HandleFunc("GET /replays", listReplaysHandler(deps.replayManager, logger))
+	mux.HandleFunc("POST /replays", startReplayHandler(deps.replayManager, logger))
+	mux.HandleFunc("DELETE /replays/{id}", cancelReplayHandler(deps.replayManager))
 	mux.Handle("GET /metrics", newMetricsHandler(deps))
 	return mux
 }

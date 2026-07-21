@@ -12,6 +12,7 @@ import (
 	"uavmonitor/internal/config"
 	"uavmonitor/internal/geofence"
 	"uavmonitor/internal/queue/natspub"
+	"uavmonitor/internal/replay"
 	"uavmonitor/internal/repository/postgres"
 	"uavmonitor/internal/telemetry"
 )
@@ -26,6 +27,7 @@ type dependencies struct {
 	historyWriter   *geofence.HistoryWriter
 	breachJournal   *geofence.BreachJournal
 	swarmDetector   *geofence.SwarmDetector
+	replayManager   *replay.Manager
 	historyConsumer jetstream.Consumer
 	zonesConsumer   jetstream.Consumer
 	breachConsumer  jetstream.Consumer
@@ -51,7 +53,15 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		return nil, nil, err
 	}
 
+	var replayManagerRef *replay.Manager
+	var replayPublisherRef *grpcTelemetryPublisher
 	cleanup := func() {
+		if replayManagerRef != nil {
+			replayManagerRef.Close()
+		}
+		if replayPublisherRef != nil {
+			replayPublisherRef.Close()
+		}
 		natsConn.Close()
 		pool.Close()
 	}
@@ -111,8 +121,15 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		return nil, nil, err
 	}
 
-	checker := geofence.NewZoneChecker(zoneIndex, natspub.NewPublisher(js), logger)
+	publisher := natspub.NewPublisher(js)
+	checker := geofence.NewZoneChecker(zoneIndex, publisher, logger)
 	historyWriter := geofence.NewHistoryWriter(repo, logger)
+	replayPublisher, err := newGRPCTelemetryPublisher(cfg.IngestServerAddr, cfg.IngestToken)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	replayManager := replay.NewManager(repo, replayPublisher, logger, replay.DefaultMaxConcurrent, postgres.MaxReplayPoints)
 	breachJournal := geofence.NewBreachJournal(repo, logger)
 	swarmDetector := geofence.NewSwarmDetector(geofence.SwarmConfig{
 		RadiusMeters: float64(cfg.SwarmRadiusM),
@@ -120,6 +137,8 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		EvalInterval: cfg.SwarmEvalInterval,
 	}, logger)
 
+	replayManagerRef = replayManager
+	replayPublisherRef = replayPublisher
 	return &dependencies{
 		pool:            pool,
 		nats:            natsConn,
@@ -130,6 +149,7 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		historyWriter:   historyWriter,
 		breachJournal:   breachJournal,
 		swarmDetector:   swarmDetector,
+		replayManager:   replayManager,
 		historyConsumer: historyConsumer,
 		zonesConsumer:   zonesConsumer,
 		breachConsumer:  breachConsumer,

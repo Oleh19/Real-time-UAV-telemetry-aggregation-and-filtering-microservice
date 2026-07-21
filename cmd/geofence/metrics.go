@@ -28,6 +28,10 @@ func newMetricsHandler(deps *dependencies) http.Handler {
 		func() int64 { return int64(deps.swarmDetector.ActiveSwarms()) })
 	registerCounter(registry, "uav_swarms_detected_total", "Swarm formations detected since start.",
 		deps.swarmDetector.DetectedTotal)
+	registerGauge(registry, "uav_active_replays", "History replays currently running.",
+		func() int64 { return int64(deps.replayManager.ActiveReplays()) })
+	registerCounter(registry, "uav_replayed_samples_total", "History samples re-published by replays.",
+		deps.replayManager.SamplesReplayed)
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 
