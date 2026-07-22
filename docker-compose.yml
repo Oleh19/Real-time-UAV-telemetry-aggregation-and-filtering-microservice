@@ -246,6 +246,7 @@ services:
       - '--storage.tsdb.retention.time=24h'
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
       - promdata:/prometheus
     ports:
       - '9090:9090'
@@ -261,6 +262,18 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: on-failure
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - '9093:9093'
+    security_opt:
+      - no-new-privileges:true
     restart: on-failure
 
   grafana:

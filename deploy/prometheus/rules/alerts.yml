@@ -1,0 +1,83 @@
+groups:
+  - name: uav-availability
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"server|geofence"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.job }} target {{ $labels.instance }} is down'
+          description: 'Prometheus has not been able to scrape {{ $labels.instance }} for over a minute.'
+
+      - alert: IngestStalled
+        expr: sum(rate(uav_ingest_received_total[5m])) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'No telemetry is being ingested'
+          description: 'The server has received zero samples for five minutes; the detection feed or ingest path is broken.'
+
+  - name: uav-slo
+    rules:
+      - alert: HighIngestDropRate
+        expr: job:uav_ingest_drop_ratio:rate5m > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          slo: ingest-availability
+        annotations:
+          summary: 'Ingest drop ratio above the 1% SLO'
+          description: '{{ $value | humanizePercentage }} of samples are being dropped by backpressure over the last 5 minutes.'
+
+      - alert: IngestSLOBudgetBurn
+        expr: job:uav_ingest_success_ratio:rate5m < 0.95
+        for: 10m
+        labels:
+          severity: critical
+          slo: ingest-availability
+        annotations:
+          summary: 'Ingest success ratio below 95%'
+          description: 'Only {{ $value | humanizePercentage }} of samples completed successfully over the last 5 minutes.'
+
+      - alert: IngestQueueSaturated
+        expr: job:uav_ingest_queue_saturation:ratio > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Ingest queue over 80% full'
+          description: 'The bounded ingest queue is {{ $value | humanizePercentage }} full; the pipeline is close to shedding load.'
+
+      - alert: PublishFailures
+        expr: sum(rate(uav_ingest_failed_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Telemetry is failing to publish to JetStream'
+          description: 'Publish failures have been non-zero for five minutes; check the NATS connection.'
+
+  - name: uav-sensor-network
+    rules:
+      - alert: SilentStations
+        expr: uav_stations_silent > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $value }} detection station(s) stopped reporting'
+          description: 'One or more sensor stations have gone stale or offline; sensor coverage is degraded.'
+
+      - alert: HistoryWriteStalled
+        expr: |
+          sum(rate(uav_history_samples_written_total[5m])) == 0
+            and
+          sum(rate(uav_ingest_received_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Flight history is not being persisted'
+          description: 'Telemetry is flowing but no history rows are being written; PostGIS or the history consumer is stuck.'

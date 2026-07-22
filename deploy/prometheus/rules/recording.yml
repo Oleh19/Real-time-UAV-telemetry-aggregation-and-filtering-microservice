@@ -1,0 +1,29 @@
+groups:
+  - name: uav-slo-recording
+    interval: 15s
+    rules:
+      - record: job:uav_ingest_drop_ratio:rate5m
+        expr: |
+          sum(rate(uav_ingest_dropped_total[5m]))
+            /
+          clamp_min(sum(rate(uav_ingest_received_total[5m])), 1)
+
+      - record: job:uav_ingest_reject_ratio:rate5m
+        expr: |
+          sum(rate(uav_ingest_rejected_total[5m]))
+            /
+          clamp_min(sum(rate(uav_ingest_received_total[5m])), 1)
+
+      - record: job:uav_ingest_success_ratio:rate5m
+        expr: |
+          1
+            -
+          sum(rate(uav_ingest_dropped_total[5m]) + rate(uav_ingest_failed_total[5m]))
+            /
+          clamp_min(sum(rate(uav_ingest_received_total[5m])), 1)
+
+      - record: job:uav_ingest_queue_saturation:ratio
+        expr: |
+          max(uav_ingest_queue_depth)
+            /
+          clamp_min(max(uav_ingest_queue_capacity), 1)
