@@ -52,6 +52,7 @@ services:
       WORKER_COUNT: '8'
       QUEUE_SIZE: '1024'
       STATE_TTL: '30s'
+      PARTITION_COUNT: '${PARTITION_COUNT:-4}'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
       TLS_CA_CERT: '/certs/ca.crt'
@@ -100,6 +101,10 @@ services:
       INGEST_SERVER_ADDR: 'server:50051'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+      REPLICA_ID: 'geofence-0'
+      SHARD_INDEX: '0'
+      SHARD_COUNT: '${SHARD_COUNT:-2}'
+      PARTITION_COUNT: '${PARTITION_COUNT:-4}'
       TLS_CA_CERT: '/certs/ca.crt'
       TLS_CLIENT_CERT: '/certs/client.crt'
       TLS_CLIENT_KEY: '/certs/client.key'
@@ -107,6 +112,54 @@ services:
       - certs:/certs:ro
     ports:
       - '8081:8081'
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      certs:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/geofence', '-healthcheck']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: on-failure
+
+  geofence-shard-1:
+    build: .
+    entrypoint: ['/usr/local/bin/geofence']
+    environment:
+      NATS_URL: 'nats://nats:4222'
+      POSTGRES_DSN: 'postgres://uav:${POSTGRES_PASSWORD:-uav}@postgres:5432/uav'
+      HTTP_ADDR: ':8081'
+      WORKER_COUNT: '8'
+      QUEUE_SIZE: '256'
+      HISTORY_RETENTION: '24h'
+      BATCH_SIZE: '100'
+      FLUSH_INTERVAL: '1s'
+      SWARM_RADIUS_METERS: '${SWARM_RADIUS_METERS:-5000}'
+      SWARM_MIN_SIZE: '${SWARM_MIN_SIZE:-3}'
+      INGEST_SERVER_ADDR: 'server:50051'
+      INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+      REPLICA_ID: 'geofence-1'
+      SHARD_INDEX: '1'
+      SHARD_COUNT: '${SHARD_COUNT:-2}'
+      PARTITION_COUNT: '${PARTITION_COUNT:-4}'
+      TLS_CA_CERT: '/certs/ca.crt'
+      TLS_CLIENT_CERT: '/certs/client.crt'
+      TLS_CLIENT_KEY: '/certs/client.key'
+    volumes:
+      - certs:/certs:ro
     depends_on:
       nats:
         condition: service_healthy

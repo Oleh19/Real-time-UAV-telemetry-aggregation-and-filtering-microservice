@@ -41,7 +41,7 @@ func TestAsyncPublishAndConsumeRoundtrip(t *testing.T) {
 	}
 	defer conn.Close()
 
-	publisher, err := natspub.NewAsyncPublisher(ctx, conn, discardLogger())
+	publisher, err := natspub.NewAsyncPublisher(ctx, conn, discardLogger(), 4)
 	if err != nil {
 		t.Fatalf("NewAsyncPublisher: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestAsyncPublishAndConsumeRoundtrip(t *testing.T) {
 	}
 	consumer, err := js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
 		Durable:       "itest-telemetry-reader",
-		FilterSubject: natspub.SubjectTelemetry,
+		FilterSubject: natspub.SubjectTelemetry + ".*",
 		AckPolicy:     jetstream.AckExplicitPolicy,
 	})
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 
 	"uavmonitor/internal/repository/postgres"
 	"uavmonitor/internal/sse"
+	"uavmonitor/internal/telemetry"
 )
 
 type geoJSONFeature struct {
@@ -33,21 +34,27 @@ type oblastAlert struct {
 func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler(deps.pool))
-	mux.HandleFunc("GET /alerts", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /alerts", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(alertsSnapshot(deps)); err != nil {
+		if err := json.NewEncoder(w).Encode(alertsSnapshot(r.Context(), deps, logger)); err != nil {
 			logger.Error("encode oblast alerts", "error", err)
 		}
 	})
-	mux.HandleFunc("GET /events", sse.Handler(sse.DefaultInterval, func(context.Context) any {
-		return alertsSnapshot(deps)
+	mux.HandleFunc("GET /events", sse.Handler(sse.DefaultInterval, func(ctx context.Context) any {
+		return alertsSnapshot(ctx, deps, logger)
 	}, logger))
 	mux.HandleFunc("GET /zones", zonesHandler(deps.repo, logger))
 	mux.HandleFunc("GET /history", historyHandler(deps.repo, logger))
 	mux.HandleFunc("GET /breaches", breachesHandler(deps.repo, logger))
-	mux.HandleFunc("GET /swarms", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /swarms", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(deps.swarmDetector.Snapshot()); err != nil {
+		swarms, err := deps.repo.ActiveSwarms(r.Context(), shardStateFresh)
+		if err != nil {
+			logger.Error("list active swarms", "error", err)
+			http.Error(w, "failed to load swarms", http.StatusInternalServerError)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(swarms); err != nil {
 			logger.Error("encode swarms", "error", err)
 		}
 	})
@@ -71,8 +78,12 @@ func healthHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-func alertsSnapshot(deps *dependencies) []oblastAlert {
-	alarms := deps.checker.ActiveAlarms()
+func alertsSnapshot(ctx context.Context, deps *dependencies, logger *slog.Logger) []oblastAlert {
+	alarms, err := deps.repo.ActiveZoneAlarms(ctx, shardStateFresh)
+	if err != nil {
+		logger.Error("query active zone alarms", "error", err)
+		alarms = map[telemetry.ZoneID]int{}
+	}
 	alerts := make([]oblastAlert, 0, len(deps.oblasts))
 	for _, oblast := range deps.oblasts {
 		drones := alarms[oblast.ID]

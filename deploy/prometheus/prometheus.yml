@@ -9,4 +9,4 @@ scrape_configs:
 
   - job_name: geofence
     static_configs:
-      - targets: ['geofence:8081']
+      - targets: ['geofence:8081', 'geofence-shard-1:8081']

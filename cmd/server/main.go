@@ -68,7 +68,7 @@ func run(logger *slog.Logger) error {
 	}
 	defer natsConn.Close()
 
-	publisher, err := natspub.NewAsyncPublisher(ctx, natsConn, logger)
+	publisher, err := natspub.NewAsyncPublisher(ctx, natsConn, logger, cfg.PartitionCount)
 	if err != nil {
 		return err
 	}

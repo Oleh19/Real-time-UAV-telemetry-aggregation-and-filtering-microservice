@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/partition"
 	"uavmonitor/internal/telemetry"
 )
 
@@ -66,13 +67,17 @@ func ensureStream(ctx context.Context, js jetstream.JetStream) error {
 }
 
 type AsyncPublisher struct {
-	js     jetstream.JetStream
-	logger *slog.Logger
-	failed atomic.Int64
+	js             jetstream.JetStream
+	logger         *slog.Logger
+	partitionCount int
+	failed         atomic.Int64
 }
 
-func NewAsyncPublisher(ctx context.Context, conn *nats.Conn, logger *slog.Logger) (*AsyncPublisher, error) {
-	publisher := &AsyncPublisher{logger: logger}
+func NewAsyncPublisher(ctx context.Context, conn *nats.Conn, logger *slog.Logger, partitionCount int) (*AsyncPublisher, error) {
+	if partitionCount < 1 {
+		partitionCount = 1
+	}
+	publisher := &AsyncPublisher{logger: logger, partitionCount: partitionCount}
 	js, err := jetstream.New(conn,
 		jetstream.WithPublishAsyncMaxPending(4096),
 		jetstream.WithPublishAsyncErrHandler(func(_ jetstream.JetStream, msg *nats.Msg, err error) {
@@ -95,11 +100,12 @@ func (p *AsyncPublisher) Publish(ctx context.Context, sample telemetry.Sample) e
 	if err != nil {
 		return fmt.Errorf("marshal telemetry: %w", err)
 	}
-	msg, span := newTracedMsg(ctx, SubjectTelemetry, payload)
+	subject := partition.Subject(SubjectTelemetry, partition.Of(sample.Latitude, sample.Longitude, p.partitionCount))
+	msg, span := newTracedMsg(ctx, subject, payload)
 	defer span.End()
 	if _, err := p.js.PublishMsgAsync(msg); err != nil {
 		span.RecordError(err)
-		return fmt.Errorf("publish to %s: %w", SubjectTelemetry, err)
+		return fmt.Errorf("publish to %s: %w", subject, err)
 	}
 	return nil
 }

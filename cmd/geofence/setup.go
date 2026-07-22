@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"uavmonitor/internal/config"
 	"uavmonitor/internal/geofence"
+	"uavmonitor/internal/partition"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/replay"
 	"uavmonitor/internal/repository/postgres"
@@ -72,22 +74,26 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		return nil, nil, err
 	}
 
-	historyConsumer, err := newConsumer(ctx, js, "geofence-history", natspub.SubjectTelemetry)
+	telemetrySubjects := partition.AssignedSubjects(natspub.SubjectTelemetry, cfg.PartitionCount, cfg.ShardIndex, cfg.ShardCount)
+	shardSuffix := fmt.Sprintf("-s%d", cfg.ShardIndex)
+	logger.Info("shard telemetry subjects", "replica", cfg.ReplicaID, "subjects", telemetrySubjects)
+
+	historyConsumer, err := newConsumer(ctx, js, "geofence-history"+shardSuffix, telemetrySubjects)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	zonesConsumer, err := newConsumer(ctx, js, "geofence-zones", natspub.SubjectTelemetry)
+	zonesConsumer, err := newConsumer(ctx, js, "geofence-zones"+shardSuffix, telemetrySubjects)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	breachConsumer, err := newConsumer(ctx, js, "geofence-breach-journal", natspub.SubjectAlerts)
+	breachConsumer, err := newConsumer(ctx, js, "geofence-breach-journal", []string{natspub.SubjectAlerts})
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	swarmConsumer, err := newConsumer(ctx, js, "geofence-swarms", natspub.SubjectTelemetry)
+	swarmConsumer, err := newConsumer(ctx, js, "geofence-swarms"+shardSuffix, telemetrySubjects)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -157,13 +163,13 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 	}, cleanup, nil
 }
 
-func newConsumer(ctx context.Context, js jetstream.JetStream, durable, subject string) (jetstream.Consumer, error) {
+func newConsumer(ctx context.Context, js jetstream.JetStream, durable string, subjects []string) (jetstream.Consumer, error) {
 	return js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
-		Durable:       durable,
-		FilterSubject: subject,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       30 * time.Second,
-		MaxDeliver:    10,
+		Durable:        durable,
+		FilterSubjects: subjects,
+		AckPolicy:      jetstream.AckExplicitPolicy,
+		AckWait:        30 * time.Second,
+		MaxDeliver:     10,
 	})
 }
 

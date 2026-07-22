@@ -8,13 +8,14 @@ import (
 )
 
 type Server struct {
-	GRPCAddr    string
-	HTTPAddr    string
-	NATSURL     string
-	WorkerCount int
-	QueueSize   int
-	StateTTL    time.Duration
-	IngestToken string
+	GRPCAddr       string
+	HTTPAddr       string
+	NATSURL        string
+	WorkerCount    int
+	QueueSize      int
+	PartitionCount int
+	StateTTL       time.Duration
+	IngestToken    string
 }
 
 type Simulator struct {
@@ -41,6 +42,10 @@ type Geofence struct {
 	SwarmEvalInterval time.Duration
 	IngestServerAddr  string
 	IngestToken       string
+	ReplicaID         string
+	ShardIndex        int
+	ShardCount        int
+	PartitionCount    int
 }
 
 func LoadServer() (Server, error) {
@@ -56,14 +61,22 @@ func LoadServer() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
+	partitionCount, err := env.Int("PARTITION_COUNT", 4)
+	if err != nil {
+		return Server{}, err
+	}
 	cfg := Server{
-		GRPCAddr:    env.String("GRPC_ADDR", ":50051"),
-		HTTPAddr:    env.String("HTTP_ADDR", ":8080"),
-		NATSURL:     env.String("NATS_URL", "nats://localhost:4222"),
-		WorkerCount: workerCount,
-		QueueSize:   queueSize,
-		StateTTL:    stateTTL,
-		IngestToken: env.String("INGEST_TOKEN", ""),
+		GRPCAddr:       env.String("GRPC_ADDR", ":50051"),
+		HTTPAddr:       env.String("HTTP_ADDR", ":8080"),
+		NATSURL:        env.String("NATS_URL", "nats://localhost:4222"),
+		WorkerCount:    workerCount,
+		QueueSize:      queueSize,
+		PartitionCount: partitionCount,
+		StateTTL:       stateTTL,
+		IngestToken:    env.String("INGEST_TOKEN", ""),
+	}
+	if cfg.PartitionCount < 1 {
+		return Server{}, fmt.Errorf("validate PARTITION_COUNT: must be >= 1, got %d", cfg.PartitionCount)
 	}
 	if cfg.WorkerCount < 1 {
 		return Server{}, fmt.Errorf("validate WORKER_COUNT: must be >= 1, got %d", cfg.WorkerCount)
@@ -158,6 +171,18 @@ func LoadGeofence() (Geofence, error) {
 	if err != nil {
 		return Geofence{}, err
 	}
+	shardIndex, err := env.Int("SHARD_INDEX", 0)
+	if err != nil {
+		return Geofence{}, err
+	}
+	shardCount, err := env.Int("SHARD_COUNT", 1)
+	if err != nil {
+		return Geofence{}, err
+	}
+	partitionCount, err := env.Int("PARTITION_COUNT", 4)
+	if err != nil {
+		return Geofence{}, err
+	}
 	cfg := Geofence{
 		NATSURL:           env.String("NATS_URL", "nats://localhost:4222"),
 		PostgresDSN:       env.String("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
@@ -172,6 +197,10 @@ func LoadGeofence() (Geofence, error) {
 		SwarmEvalInterval: swarmEvalInterval,
 		IngestServerAddr:  env.String("INGEST_SERVER_ADDR", "localhost:50051"),
 		IngestToken:       env.String("INGEST_TOKEN", ""),
+		ReplicaID:         env.String("REPLICA_ID", "geofence-0"),
+		ShardIndex:        shardIndex,
+		ShardCount:        shardCount,
+		PartitionCount:    partitionCount,
 	}
 	if cfg.WorkerCount < 1 {
 		return Geofence{}, fmt.Errorf("validate WORKER_COUNT: must be >= 1, got %d", cfg.WorkerCount)
@@ -196,6 +225,15 @@ func LoadGeofence() (Geofence, error) {
 	}
 	if cfg.SwarmEvalInterval < time.Second {
 		return Geofence{}, fmt.Errorf("validate SWARM_EVAL_INTERVAL: must be >= 1s, got %s", cfg.SwarmEvalInterval)
+	}
+	if cfg.ShardCount < 1 {
+		return Geofence{}, fmt.Errorf("validate SHARD_COUNT: must be >= 1, got %d", cfg.ShardCount)
+	}
+	if cfg.ShardIndex < 0 || cfg.ShardIndex >= cfg.ShardCount {
+		return Geofence{}, fmt.Errorf("validate SHARD_INDEX: must be within [0, %d), got %d", cfg.ShardCount, cfg.ShardIndex)
+	}
+	if cfg.PartitionCount < cfg.ShardCount {
+		return Geofence{}, fmt.Errorf("validate PARTITION_COUNT: must be >= SHARD_COUNT %d, got %d", cfg.ShardCount, cfg.PartitionCount)
 	}
 	return cfg, nil
 }
