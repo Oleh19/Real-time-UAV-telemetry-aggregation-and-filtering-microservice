@@ -13,7 +13,7 @@ alerting:
 scrape_configs:
   - job_name: server
     static_configs:
-      - targets: ['server:8080']
+      - targets: ['server:8080', 'server-shard-1:8080']
 
   - job_name: geofence
     static_configs:
