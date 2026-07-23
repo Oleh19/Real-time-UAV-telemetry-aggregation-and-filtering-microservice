@@ -1,9 +1,7 @@
 package simulator
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"math"
 	"math/rand/v2"
 	"time"
@@ -92,6 +90,15 @@ func (d *Drone) pickWaypoint() {
 	d.waypointLongitude = ukraineMinLongitude + d.rng.Float64()*(ukraineMaxLongitude-ukraineMinLongitude)
 }
 
+func (d *Drone) Advance(interval time.Duration) *telemetryv1.DroneTelemetry {
+	return d.advance(interval)
+}
+
+func (d *Drone) ShotDown(interval time.Duration) bool {
+	lifetimeTicks := int(meanLifetime/interval) + 1
+	return d.rng.IntN(lifetimeTicks) == 0
+}
+
 func (d *Drone) advance(interval time.Duration) *telemetryv1.DroneTelemetry {
 	previousLatitude, previousLongitude := d.latitude, d.longitude
 	step := d.profile.minStepDegrees + d.rng.Float64()*(d.profile.maxStepDegrees-d.profile.minStepDegrees)
@@ -143,29 +150,4 @@ func (d *Drone) ID() string {
 
 func (d *Drone) Position() (latitude, longitude float64) {
 	return d.latitude, d.longitude
-}
-
-func (d *Drone) Fly(ctx context.Context, interval time.Duration, emit func(*telemetryv1.DroneTelemetry) error, logger *slog.Logger) error {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	lifetimeTicks := int(meanLifetime/interval) + 1
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			if d.rng.IntN(lifetimeTicks) == 0 {
-				logger.Info("drone shot down",
-					"drone_id", d.id,
-					"latitude", d.latitude,
-					"longitude", d.longitude,
-				)
-				return nil
-			}
-			if err := emit(d.advance(interval)); err != nil {
-				return fmt.Errorf("emit telemetry for %s: %w", d.id, err)
-			}
-		}
-	}
 }

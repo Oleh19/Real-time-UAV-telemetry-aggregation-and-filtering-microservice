@@ -24,6 +24,8 @@ import (
 	"uavmonitor/internal/simulator"
 )
 
+const senderBuffer = 8192
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if err := run(logger); err != nil {
@@ -42,7 +44,7 @@ func run(logger *slog.Logger) error {
 	defer stop()
 
 	tlsFiles := mtls.FilesFromEnv()
-	router := clientRouter{clients: make([]telemetryv1.TelemetryServiceClient, 0, len(cfg.ServerAddrs))}
+	conns := make([]*grpc.ClientConn, 0, len(cfg.ServerAddrs))
 	for _, addr := range cfg.ServerAddrs {
 		transportCreds, secure, err := mtls.DialCredentials(tlsFiles, serverName(addr))
 		if err != nil {
@@ -61,33 +63,21 @@ func run(logger *slog.Logger) error {
 				logger.Error("close grpc connection", "error", err)
 			}
 		}()
-		router.clients = append(router.clients, telemetryv1.NewTelemetryServiceClient(conn))
+		conns = append(conns, conn)
 	}
 
+	stationsForServer := cfg.StationCount * len(conns)
 	logger.Info("simulator starting",
 		"server_addrs", cfg.ServerAddrs,
 		"max_concurrent_drones", cfg.DroneCount,
 		"stations", cfg.StationCount,
+		"streams", stationsForServer,
 		"observation_noise_m", cfg.ObservationNoiseM,
 		"send_interval", cfg.SendInterval.String(),
 	)
 
-	var droneIDs atomic.Int64
-	var wg sync.WaitGroup
-	for slot := range cfg.DroneCount {
-		wg.Go(func() {
-			runDroneSlot(ctx, router, cfg, slot, &droneIDs, logger)
-		})
-	}
-	if cfg.SwarmSize >= 2 {
-		wg.Go(func() {
-			runSwarmSlot(ctx, router, cfg, &droneIDs, logger)
-		})
-	}
-	wg.Wait()
-
-	logger.Info("simulator stopped")
-	return nil
+	fleet := newFleet(cfg, conns, logger)
+	return fleet.run(ctx)
 }
 
 type ingestToken struct {
@@ -108,163 +98,169 @@ func serverName(addr string) string {
 	return addr
 }
 
-type clientRouter struct {
-	clients []telemetryv1.TelemetryServiceClient
+type sender struct {
+	ch      chan *telemetryv1.DroneTelemetry
+	dropped atomic.Int64
 }
 
-func (r clientRouter) forPosition(latitude, longitude float64) telemetryv1.TelemetryServiceClient {
-	return r.clients[partition.Of(latitude, longitude, len(r.clients))]
+func (s *sender) emit(msg *telemetryv1.DroneTelemetry) {
+	select {
+	case s.ch <- msg:
+	default:
+		s.dropped.Add(1)
+	}
 }
 
-func runDroneSlot(ctx context.Context, router clientRouter, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
-	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(slot)))
+func (s *sender) run(ctx context.Context, client telemetryv1.TelemetryServiceClient, label string, logger *slog.Logger) {
 	for {
-		respawnDelay := time.Duration(2+rng.IntN(28)) * time.Second
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(respawnDelay):
-		}
-		drone := simulator.NewDrone(int(droneIDs.Add(1)), rng)
-		client := router.forPosition(drone.Position())
-		if err := flyThroughStations(ctx, client, cfg, drone, rng, logger); err != nil {
+		if err := s.pump(ctx, client); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			logger.Warn("drone stream failed", "slot", slot, "error", err)
-		}
-		if ctx.Err() != nil {
-			return
-		}
-	}
-}
-
-type stationLink struct {
-	station *simulator.Station
-	stream  telemetryv1.TelemetryService_StreamTelemetryClient
-}
-
-func openStationLinks(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, rng *rand.Rand, logger *slog.Logger) ([]stationLink, error) {
-	links := make([]stationLink, 0, cfg.StationCount)
-	for n := 1; n <= cfg.StationCount; n++ {
-		stream, err := client.StreamTelemetry(ctx)
-		if err != nil {
-			closeLinks(links, "unopened", logger)
-			return nil, fmt.Errorf("open station stream: %w", err)
-		}
-		links = append(links, stationLink{
-			station: simulator.NewStation(n, cfg.ObservationNoiseM, rng),
-			stream:  stream,
-		})
-	}
-	return links, nil
-}
-
-func sendThroughLinks(links []stationLink, truth *telemetryv1.DroneTelemetry) error {
-	for _, link := range links {
-		if err := link.stream.Send(link.station.Observe(truth)); err != nil {
-			return fmt.Errorf("station %s send: %w", link.station.ID(), err)
-		}
-	}
-	return nil
-}
-
-func flyThroughStations(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, drone *simulator.Drone, rng *rand.Rand, logger *slog.Logger) error {
-	links, err := openStationLinks(ctx, client, cfg, rng, logger)
-	if err != nil {
-		return fmt.Errorf("open streams for %s: %w", drone.ID(), err)
-	}
-
-	emit := func(truth *telemetryv1.DroneTelemetry) error {
-		return sendThroughLinks(links, truth)
-	}
-
-	flyErr := drone.Fly(ctx, cfg.SendInterval, emit, logger)
-	closeLinks(links, drone.ID(), logger)
-	return flyErr
-}
-
-func runSwarmSlot(ctx context.Context, router clientRouter, cfg config.Simulator, droneIDs *atomic.Int64, logger *slog.Logger) {
-	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0x5747524d))
-	for {
-		respawnDelay := time.Duration(5+rng.IntN(25)) * time.Second
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(respawnDelay):
-		}
-		leader := simulator.NewDrone(int(droneIDs.Add(1)), rng)
-		members := make([]*simulator.SwarmMember, 0, cfg.SwarmSize-1)
-		for range cfg.SwarmSize - 1 {
-			members = append(members, simulator.NewSwarmMember(int(droneIDs.Add(1)), rng))
-		}
-		client := router.forPosition(leader.Position())
-		logger.Info("swarm launched", "leader", leader.ID(), "size", cfg.SwarmSize)
-		if err := flySwarm(ctx, client, cfg, leader, members, rng, logger); err != nil {
-			if ctx.Err() != nil {
+			logger.Warn("sender stream failed, reopening", "stream", label, "error", err)
+			select {
+			case <-ctx.Done():
 				return
+			case <-time.After(time.Second):
 			}
-			logger.Warn("swarm stream failed", "leader", leader.ID(), "error", err)
-		}
-		if ctx.Err() != nil {
-			return
-		}
-	}
-}
-
-func flySwarm(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, leader *simulator.Drone, members []*simulator.SwarmMember, rng *rand.Rand, logger *slog.Logger) error {
-	leaderLinks, err := openStationLinks(ctx, client, cfg, rng, logger)
-	if err != nil {
-		return fmt.Errorf("open streams for swarm leader %s: %w", leader.ID(), err)
-	}
-	memberLinks := make([][]stationLink, 0, len(members))
-	for _, member := range members {
-		links, err := openStationLinks(ctx, client, cfg, rng, logger)
-		if err != nil {
-			closeLinks(leaderLinks, leader.ID(), logger)
-			for n, opened := range memberLinks {
-				closeLinks(opened, members[n].ID(), logger)
-			}
-			return fmt.Errorf("open streams for swarm member %s: %w", member.ID(), err)
-		}
-		memberLinks = append(memberLinks, links)
-	}
-
-	emit := func(truth *telemetryv1.DroneTelemetry) error {
-		if err := sendThroughLinks(leaderLinks, truth); err != nil {
-			return err
-		}
-		for n, member := range members {
-			if err := sendThroughLinks(memberLinks[n], member.Follow(truth)); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	flyErr := leader.Fly(ctx, cfg.SendInterval, emit, logger)
-	closeLinks(leaderLinks, leader.ID(), logger)
-	for n, links := range memberLinks {
-		closeLinks(links, members[n].ID(), logger)
-	}
-	return flyErr
-}
-
-func closeLinks(links []stationLink, droneID string, logger *slog.Logger) {
-	for _, link := range links {
-		summary, err := link.stream.CloseAndRecv()
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
-			logger.Warn("close stream", "drone_id", droneID, "station", link.station.ID(), "error", err)
 			continue
 		}
-		if summary != nil {
-			logger.Info("stream closed",
-				"drone_id", droneID,
-				"station", link.station.ID(),
-				"received_by_server", summary.GetReceivedCount(),
-				"dropped_by_server", summary.GetDroppedCount(),
-				"rejected_by_server", summary.GetRejectedCount(),
-			)
+		return
+	}
+}
+
+func (s *sender) pump(ctx context.Context, client telemetryv1.TelemetryServiceClient) error {
+	stream, err := client.StreamTelemetry(ctx)
+	if err != nil {
+		return fmt.Errorf("open stream: %w", err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			_, closeErr := stream.CloseAndRecv()
+			if closeErr != nil && !errors.Is(closeErr, io.EOF) && !errors.Is(closeErr, context.Canceled) {
+				return closeErr
+			}
+			return nil
+		case msg := <-s.ch:
+			if err := stream.Send(msg); err != nil {
+				return fmt.Errorf("send: %w", err)
+			}
 		}
+	}
+}
+
+type fleet struct {
+	cfg      config.Simulator
+	conns    []*grpc.ClientConn
+	logger   *slog.Logger
+	stations []*simulator.Station
+	senders  [][]*sender
+	rng      *rand.Rand
+	droneIDs atomic.Int64
+}
+
+func newFleet(cfg config.Simulator, conns []*grpc.ClientConn, logger *slog.Logger) *fleet {
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0x53494d))
+	stations := make([]*simulator.Station, cfg.StationCount)
+	for n := range stations {
+		stations[n] = simulator.NewStation(n+1, cfg.ObservationNoiseM, rng)
+	}
+	senders := make([][]*sender, cfg.StationCount)
+	for st := range senders {
+		senders[st] = make([]*sender, len(conns))
+		for sv := range senders[st] {
+			senders[st][sv] = &sender{ch: make(chan *telemetryv1.DroneTelemetry, senderBuffer)}
+		}
+	}
+	return &fleet{cfg: cfg, conns: conns, logger: logger, stations: stations, senders: senders, rng: rng}
+}
+
+func (f *fleet) run(ctx context.Context) error {
+	var wg sync.WaitGroup
+	for st := range f.senders {
+		for sv := range f.senders[st] {
+			client := telemetryv1.NewTelemetryServiceClient(f.conns[sv])
+			s := f.senders[st][sv]
+			label := fmt.Sprintf("station-%02d->server-%d", st+1, sv)
+			wg.Go(func() { s.run(ctx, client, label, f.logger) })
+		}
+	}
+
+	slots := make([]*simulator.Drone, f.cfg.DroneCount)
+	respawnAt := make([]time.Time, f.cfg.DroneCount)
+	now := time.Now()
+	for n := range respawnAt {
+		respawnAt[n] = now.Add(time.Duration(f.rng.IntN(int(f.cfg.SendInterval.Seconds()*1000)+2000)) * time.Millisecond)
+	}
+
+	var swarmLeader *simulator.Drone
+	var swarmMembers []*simulator.SwarmMember
+	swarmRespawnAt := now.Add(5 * time.Second)
+
+	ticker := time.NewTicker(f.cfg.SendInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			f.logger.Info("simulator stopped")
+			return nil
+		case tick := <-ticker.C:
+			for n := range slots {
+				slots[n] = f.stepDrone(slots[n], &respawnAt[n], tick)
+			}
+			swarmLeader, swarmMembers = f.stepSwarm(swarmLeader, swarmMembers, &swarmRespawnAt, tick)
+		}
+	}
+}
+
+func (f *fleet) stepDrone(drone *simulator.Drone, respawnAt *time.Time, tick time.Time) *simulator.Drone {
+	if drone == nil {
+		if tick.Before(*respawnAt) {
+			return nil
+		}
+		return simulator.NewDrone(int(f.droneIDs.Add(1)), f.rng)
+	}
+	if drone.ShotDown(f.cfg.SendInterval) {
+		*respawnAt = tick.Add(time.Duration(2+f.rng.IntN(28)) * time.Second)
+		return nil
+	}
+	f.dispatch(drone.Advance(f.cfg.SendInterval))
+	return drone
+}
+
+func (f *fleet) stepSwarm(leader *simulator.Drone, members []*simulator.SwarmMember, respawnAt *time.Time, tick time.Time) (*simulator.Drone, []*simulator.SwarmMember) {
+	if f.cfg.SwarmSize < 2 {
+		return nil, nil
+	}
+	if leader == nil {
+		if tick.Before(*respawnAt) {
+			return nil, nil
+		}
+		leader = simulator.NewDrone(int(f.droneIDs.Add(1)), f.rng)
+		members = make([]*simulator.SwarmMember, 0, f.cfg.SwarmSize-1)
+		for range f.cfg.SwarmSize - 1 {
+			members = append(members, simulator.NewSwarmMember(int(f.droneIDs.Add(1)), f.rng))
+		}
+		f.logger.Info("swarm launched", "leader", leader.ID(), "size", f.cfg.SwarmSize)
+		return leader, members
+	}
+	if leader.ShotDown(f.cfg.SendInterval) {
+		*respawnAt = tick.Add(time.Duration(5+f.rng.IntN(25)) * time.Second)
+		return nil, nil
+	}
+	truth := leader.Advance(f.cfg.SendInterval)
+	f.dispatch(truth)
+	for _, member := range members {
+		f.dispatch(member.Follow(truth))
+	}
+	return leader, members
+}
+
+func (f *fleet) dispatch(truth *telemetryv1.DroneTelemetry) {
+	serverIdx := partition.Of(truth.GetLatitude(), truth.GetLongitude(), len(f.conns))
+	for st, station := range f.stations {
+		f.senders[st][serverIdx].emit(station.Observe(truth))
 	}
 }
