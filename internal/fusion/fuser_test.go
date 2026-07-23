@@ -1,6 +1,7 @@
 package fusion_test
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -119,9 +120,24 @@ func TestFuserExpiresStaleTracks(t *testing.T) {
 	fuser.Resolve(observation("station-01", "s1-t1", 50.00, 30.00, now))
 	time.Sleep(40 * time.Millisecond)
 	fuser.Resolve(observation("station-02", "s2-t9", 55.00, 35.00, time.Now()))
+	fuser.Sweep()
 
 	if got := fuser.ActiveTracks(); got != 1 {
 		t.Fatalf("ActiveTracks after TTL = %d, want only the fresh track", got)
+	}
+}
+
+func TestFuserSpreadsLoadAcrossShards(t *testing.T) {
+	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	now := time.Now()
+	for n := range 200 {
+		lat := 45.0 + float64(n%40)*0.15
+		lon := 23.0 + float64(n%30)*0.4
+		drone := telemetry.DroneID(fmt.Sprintf("s1-t%d", n))
+		fuser.Resolve(observation("station-01", string(drone), lat, lon, now))
+	}
+	if got := fuser.ActiveTracks(); got != 200 {
+		t.Fatalf("ActiveTracks = %d, want 200 distinct tracks across shards", got)
 	}
 }
 

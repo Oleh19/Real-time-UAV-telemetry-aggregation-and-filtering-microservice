@@ -1,6 +1,7 @@
 package fusion
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -10,6 +11,12 @@ import (
 	"uavmonitor/internal/telemetry"
 )
 
+const (
+	defaultShards      = 16
+	coarseCellDegrees  = 1.0
+	metersPerDegreeLat = 111320.0
+)
+
 type Config struct {
 	GateRadiusMeters  float64
 	GateChiSquared    float64
@@ -17,6 +24,7 @@ type Config struct {
 	ProcessAccelMps2  float64
 	TrackTTL          time.Duration
 	MergeWindow       time.Duration
+	Shards            int
 }
 
 func DefaultConfig() Config {
@@ -27,6 +35,7 @@ func DefaultConfig() Config {
 		ProcessAccelMps2:  4,
 		TrackTTL:          30 * time.Second,
 		MergeWindow:       3 * time.Second,
+		Shards:            defaultShards,
 	}
 }
 
@@ -40,22 +49,35 @@ type observation struct {
 	seenAt time.Time
 }
 
+type gridCell struct {
+	row int
+	col int
+}
+
 type fusedTrack struct {
 	id           telemetry.DroneID
 	filter       *kalmanFilter
 	observations map[observationKey]observation
 	lastUpdate   time.Time
+	cell         gridCell
 }
 
 type Fuser struct {
-	cfg           Config
+	cfg         Config
+	shards      []*fuserShard
+	nextTrack   atomic.Int64
+	mergesTotal atomic.Int64
+	gatedTotal  atomic.Int64
+}
+
+type fuserShard struct {
+	fuser         *Fuser
+	cellDegrees   float64
 	mu            sync.Mutex
 	tracks        map[telemetry.DroneID]*fusedTrack
 	byObservation map[observationKey]telemetry.DroneID
-	nextTrack     int64
+	grid          map[gridCell]map[telemetry.DroneID]struct{}
 	lastPrune     time.Time
-	mergesTotal   atomic.Int64
-	gatedTotal    atomic.Int64
 }
 
 func NewFuser(cfg Config) *Fuser {
@@ -78,80 +100,145 @@ func NewFuser(cfg Config) *Fuser {
 	if cfg.MergeWindow <= 0 {
 		cfg.MergeWindow = defaults.MergeWindow
 	}
-	return &Fuser{
-		cfg:           cfg,
-		tracks:        make(map[telemetry.DroneID]*fusedTrack),
-		byObservation: make(map[observationKey]telemetry.DroneID),
+	if cfg.Shards <= 0 {
+		cfg.Shards = defaults.Shards
 	}
+	f := &Fuser{cfg: cfg}
+	fineCellDegrees := cfg.GateRadiusMeters / metersPerDegreeLat
+	f.shards = make([]*fuserShard, cfg.Shards)
+	for n := range f.shards {
+		f.shards[n] = &fuserShard{
+			fuser:         f,
+			cellDegrees:   fineCellDegrees,
+			tracks:        make(map[telemetry.DroneID]*fusedTrack),
+			byObservation: make(map[observationKey]telemetry.DroneID),
+			grid:          make(map[gridCell]map[telemetry.DroneID]struct{}),
+		}
+	}
+	return f
 }
 
 func (f *Fuser) Resolve(sample telemetry.Sample) telemetry.Sample {
 	if sample.StationID == "" {
 		return sample
 	}
+	return f.shardFor(sample.Latitude, sample.Longitude).resolve(sample)
+}
+
+func (f *Fuser) shardFor(latitude, longitude float64) *fuserShard {
+	cell := cellOf(latitude, longitude, coarseCellDegrees)
+	h := cell.row*73856093 ^ cell.col*19349663
+	if h < 0 {
+		h = -h
+	}
+	return f.shards[h%len(f.shards)]
+}
+
+func (s *fuserShard) resolve(sample telemetry.Sample) telemetry.Sample {
 	key := observationKey{station: sample.StationID, drone: sample.DroneID}
 	now := time.Now()
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.pruneLocked(now)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(now)
 
-	track, isNew := f.trackForLocked(key, sample, now)
+	track, isNew := s.trackForLocked(key, sample, now)
 	if !isNew {
 		track.filter.update(sample.Latitude, sample.Longitude, sample.Timestamp)
+		s.reindexLocked(track)
 	}
 	track.observations[key] = observation{sample: sample, seenAt: now}
 	track.lastUpdate = now
-	return f.fusedSampleLocked(track, sample.Timestamp, now)
+	return s.fusedSampleLocked(track, sample.Timestamp, now)
 }
 
-func (f *Fuser) trackForLocked(key observationKey, sample telemetry.Sample, now time.Time) (*fusedTrack, bool) {
-	if id, ok := f.byObservation[key]; ok {
-		if track, alive := f.tracks[id]; alive {
+func (s *fuserShard) trackForLocked(key observationKey, sample telemetry.Sample, now time.Time) (*fusedTrack, bool) {
+	if id, ok := s.byObservation[key]; ok {
+		if track, alive := s.tracks[id]; alive {
 			return track, false
 		}
-		delete(f.byObservation, key)
+		delete(s.byObservation, key)
 	}
-	if track := f.bestCandidateLocked(key, sample); track != nil {
-		f.byObservation[key] = track.id
-		f.mergesTotal.Add(1)
+	if track := s.bestCandidateLocked(key, sample); track != nil {
+		s.byObservation[key] = track.id
+		s.fuser.mergesTotal.Add(1)
 		return track, false
 	}
-	f.nextTrack++
+	id := telemetry.DroneID(fmt.Sprintf("target-%03d", s.fuser.nextTrack.Add(1)))
 	track := &fusedTrack{
-		id:           telemetry.DroneID(fmt.Sprintf("target-%03d", f.nextTrack)),
-		filter:       newKalmanFilter(sample.Latitude, sample.Longitude, sample.Timestamp, f.cfg.MeasurementNoiseM, f.cfg.ProcessAccelMps2),
+		id:           id,
+		filter:       newKalmanFilter(sample.Latitude, sample.Longitude, sample.Timestamp, s.fuser.cfg.MeasurementNoiseM, s.fuser.cfg.ProcessAccelMps2),
 		observations: make(map[observationKey]observation),
 		lastUpdate:   now,
+		cell:         cellOf(sample.Latitude, sample.Longitude, s.cellDegrees),
 	}
-	f.tracks[track.id] = track
-	f.byObservation[key] = track.id
+	s.tracks[id] = track
+	s.addToGridLocked(track)
+	s.byObservation[key] = id
 	return track, true
 }
 
-func (f *Fuser) bestCandidateLocked(key observationKey, sample telemetry.Sample) *fusedTrack {
+func (s *fuserShard) bestCandidateLocked(key observationKey, sample telemetry.Sample) *fusedTrack {
+	origin := cellOf(sample.Latitude, sample.Longitude, s.cellDegrees)
 	var best *fusedTrack
-	bestDistance := f.cfg.GateChiSquared
-	for _, track := range f.tracks {
-		if f.stationSeesTrackLocked(track, key.station) {
-			continue
-		}
-		latitude, longitude := track.filter.position()
-		if coarseDistanceMeters(latitude, longitude, sample.Latitude, sample.Longitude) > f.cfg.GateRadiusMeters {
-			continue
-		}
-		distance := track.filter.mahalanobisSquared(sample.Latitude, sample.Longitude, sample.Timestamp)
-		if distance <= bestDistance {
-			best = track
-			bestDistance = distance
-		} else if distance > f.cfg.GateChiSquared {
-			f.gatedTotal.Add(1)
+	bestDistance := s.fuser.cfg.GateChiSquared
+	for dRow := -1; dRow <= 1; dRow++ {
+		for dCol := -1; dCol <= 1; dCol++ {
+			cell := gridCell{row: origin.row + dRow, col: origin.col + dCol}
+			for id := range s.grid[cell] {
+				track := s.tracks[id]
+				if track == nil || s.stationSeesTrackLocked(track, key.station) {
+					continue
+				}
+				latitude, longitude := track.filter.position()
+				if coarseDistanceMeters(latitude, longitude, sample.Latitude, sample.Longitude) > s.fuser.cfg.GateRadiusMeters {
+					continue
+				}
+				distance := track.filter.mahalanobisSquared(sample.Latitude, sample.Longitude, sample.Timestamp)
+				if distance <= bestDistance {
+					best = track
+					bestDistance = distance
+				} else if distance > s.fuser.cfg.GateChiSquared {
+					s.fuser.gatedTotal.Add(1)
+				}
+			}
 		}
 	}
 	return best
 }
 
-func (f *Fuser) stationSeesTrackLocked(track *fusedTrack, station telemetry.StationID) bool {
+func (s *fuserShard) reindexLocked(track *fusedTrack) {
+	latitude, longitude := track.filter.position()
+	newCell := cellOf(latitude, longitude, s.cellDegrees)
+	if newCell == track.cell {
+		return
+	}
+	s.removeFromGridLocked(track)
+	track.cell = newCell
+	s.addToGridLocked(track)
+}
+
+func (s *fuserShard) addToGridLocked(track *fusedTrack) {
+	bucket := s.grid[track.cell]
+	if bucket == nil {
+		bucket = make(map[telemetry.DroneID]struct{})
+		s.grid[track.cell] = bucket
+	}
+	bucket[track.id] = struct{}{}
+}
+
+func (s *fuserShard) removeFromGridLocked(track *fusedTrack) {
+	bucket := s.grid[track.cell]
+	if bucket == nil {
+		return
+	}
+	delete(bucket, track.id)
+	if len(bucket) == 0 {
+		delete(s.grid, track.cell)
+	}
+}
+
+func (s *fuserShard) stationSeesTrackLocked(track *fusedTrack, station telemetry.StationID) bool {
 	for key := range track.observations {
 		if key.station == station {
 			return true
@@ -160,7 +247,7 @@ func (f *Fuser) stationSeesTrackLocked(track *fusedTrack, station telemetry.Stat
 	return false
 }
 
-func (f *Fuser) fusedSampleLocked(track *fusedTrack, timestamp time.Time, now time.Time) telemetry.Sample {
+func (s *fuserShard) fusedSampleLocked(track *fusedTrack, timestamp time.Time, now time.Time) telemetry.Sample {
 	latitude, longitude := track.filter.position()
 	fused := telemetry.Sample{
 		DroneID:   track.id,
@@ -169,7 +256,7 @@ func (f *Fuser) fusedSampleLocked(track *fusedTrack, timestamp time.Time, now ti
 		Longitude: longitude,
 		Speed:     float32(track.filter.speed()),
 	}
-	cutoff := now.Add(-f.cfg.MergeWindow)
+	cutoff := now.Add(-s.fuser.cfg.MergeWindow)
 	var altitudeSum float64
 	fresh := 0
 	for _, obs := range track.observations {
@@ -188,29 +275,57 @@ func (f *Fuser) fusedSampleLocked(track *fusedTrack, timestamp time.Time, now ti
 	return fused
 }
 
-func (f *Fuser) pruneLocked(now time.Time) {
-	if now.Sub(f.lastPrune) < f.cfg.TrackTTL/4 {
+func (s *fuserShard) pruneLocked(now time.Time) {
+	if now.Sub(s.lastPrune) < s.fuser.cfg.TrackTTL/4 {
 		return
 	}
-	f.lastPrune = now
-	cutoff := now.Add(-f.cfg.TrackTTL)
-	for id, track := range f.tracks {
+	s.lastPrune = now
+	cutoff := now.Add(-s.fuser.cfg.TrackTTL)
+	for id, track := range s.tracks {
 		if track.lastUpdate.After(cutoff) {
 			continue
 		}
-		delete(f.tracks, id)
-		for key, fusedID := range f.byObservation {
+		s.removeFromGridLocked(track)
+		delete(s.tracks, id)
+		for key, fusedID := range s.byObservation {
 			if fusedID == id {
-				delete(f.byObservation, key)
+				delete(s.byObservation, key)
 			}
 		}
 	}
 }
 
+func (f *Fuser) Run(ctx context.Context) {
+	ticker := time.NewTicker(f.cfg.TrackTTL / 4)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			f.Sweep()
+		}
+	}
+}
+
+func (f *Fuser) Sweep() {
+	now := time.Now()
+	for _, shard := range f.shards {
+		shard.mu.Lock()
+		shard.lastPrune = time.Time{}
+		shard.pruneLocked(now)
+		shard.mu.Unlock()
+	}
+}
+
 func (f *Fuser) ActiveTracks() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.tracks)
+	total := 0
+	for _, shard := range f.shards {
+		shard.mu.Lock()
+		total += len(shard.tracks)
+		shard.mu.Unlock()
+	}
+	return total
 }
 
 func (f *Fuser) MergesTotal() int64 {
@@ -219,6 +334,13 @@ func (f *Fuser) MergesTotal() int64 {
 
 func (f *Fuser) GatedTotal() int64 {
 	return f.gatedTotal.Load()
+}
+
+func cellOf(latitude, longitude, sizeDegrees float64) gridCell {
+	return gridCell{
+		row: int(math.Floor((latitude + 90) / sizeDegrees)),
+		col: int(math.Floor((longitude + 180) / sizeDegrees)),
+	}
 }
 
 func coarseDistanceMeters(lat1, lon1, lat2, lon2 float64) float64 {

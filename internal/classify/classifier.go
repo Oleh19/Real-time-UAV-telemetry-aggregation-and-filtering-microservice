@@ -13,6 +13,7 @@ const (
 	minSamplesToClassify = 6
 	trackTTL             = time.Minute
 	pruneEvery           = 15 * time.Second
+	shards               = 16
 
 	fastCruiseSpeedMps  = 280.0
 	slowRotorSpeedMps   = 110.0
@@ -31,26 +32,44 @@ type trackWindow struct {
 	lastSeen time.Time
 }
 
-type Classifier struct {
+type classifierShard struct {
 	mu        sync.Mutex
 	tracks    map[telemetry.DroneID]*trackWindow
 	lastPrune time.Time
 }
 
+type Classifier struct {
+	shards [shards]*classifierShard
+}
+
 func NewClassifier() *Classifier {
-	return &Classifier{tracks: make(map[telemetry.DroneID]*trackWindow)}
+	c := &Classifier{}
+	for n := range c.shards {
+		c.shards[n] = &classifierShard{tracks: make(map[telemetry.DroneID]*trackWindow)}
+	}
+	return c
+}
+
+func (c *Classifier) shardFor(id telemetry.DroneID) *classifierShard {
+	var h uint32 = 2166136261
+	for i := range len(id) {
+		h ^= uint32(id[i])
+		h *= 16777619
+	}
+	return c.shards[h%shards]
 }
 
 func (c *Classifier) Classify(sample telemetry.Sample) telemetry.TargetClass {
 	now := time.Now()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.pruneLocked(now)
+	s := c.shardFor(sample.DroneID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(now)
 
-	track, ok := c.tracks[sample.DroneID]
+	track, ok := s.tracks[sample.DroneID]
 	if !ok {
 		track = &trackWindow{points: make([]point, 0, windowSize)}
-		c.tracks[sample.DroneID] = track
+		s.tracks[sample.DroneID] = track
 	}
 	track.lastSeen = now
 	track.points = append(track.points, point{
@@ -109,28 +128,30 @@ func headingVariance(points []point) float64 {
 }
 
 func (c *Classifier) TrackedByClass() map[telemetry.TargetClass]int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	counts := make(map[telemetry.TargetClass]int, 4)
-	for _, track := range c.tracks {
-		if len(track.points) < minSamplesToClassify {
-			counts[telemetry.ClassUnknown]++
-			continue
+	for _, s := range c.shards {
+		s.mu.Lock()
+		for _, track := range s.tracks {
+			if len(track.points) < minSamplesToClassify {
+				counts[telemetry.ClassUnknown]++
+				continue
+			}
+			counts[classify(meanSpeed(track.points), headingVariance(track.points))]++
 		}
-		counts[classify(meanSpeed(track.points), headingVariance(track.points))]++
+		s.mu.Unlock()
 	}
 	return counts
 }
 
-func (c *Classifier) pruneLocked(now time.Time) {
-	if now.Sub(c.lastPrune) < pruneEvery {
+func (s *classifierShard) pruneLocked(now time.Time) {
+	if now.Sub(s.lastPrune) < pruneEvery {
 		return
 	}
-	c.lastPrune = now
+	s.lastPrune = now
 	cutoff := now.Add(-trackTTL)
-	for id, track := range c.tracks {
+	for id, track := range s.tracks {
 		if track.lastSeen.Before(cutoff) {
-			delete(c.tracks, id)
+			delete(s.tracks, id)
 		}
 	}
 }

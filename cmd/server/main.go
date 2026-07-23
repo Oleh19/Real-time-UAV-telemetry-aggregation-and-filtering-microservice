@@ -87,6 +87,7 @@ func run(logger *slog.Logger) error {
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
 	ingestor.Start(workerCtx, cfg.WorkerCount)
+	go fuser.Run(workerCtx)
 
 	if cfg.IngestToken == "" {
 		logger.Warn("ingest authentication disabled: set INGEST_TOKEN to require a token")

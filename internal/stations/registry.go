@@ -3,8 +3,10 @@ package stations
 import (
 	"context"
 	"log/slog"
+	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"uavmonitor/internal/telemetry"
@@ -17,6 +19,8 @@ const (
 	StatusStale   Status = "stale"
 	StatusOffline Status = "offline"
 )
+
+const rateWindow = 10 * time.Second
 
 type Config struct {
 	OnlineWithin  time.Duration
@@ -43,19 +47,25 @@ type Info struct {
 }
 
 type stationState struct {
-	lastSeen     time.Time
-	samples      int64
-	rateSamples  int64
-	rateSince    time.Time
-	rate         float64
+	lastSeen     atomic.Int64
+	samples      atomic.Int64
+	windowStart  atomic.Int64
+	windowCount  atomic.Int64
 	lastReported Status
+}
+
+func (s *stationState) rate(nowNano int64) float64 {
+	elapsed := float64(nowNano-s.windowStart.Load()) / float64(time.Second)
+	if elapsed <= 0 {
+		return 0
+	}
+	return float64(s.windowCount.Load()) / elapsed
 }
 
 type Registry struct {
 	cfg      Config
 	logger   *slog.Logger
-	mu       sync.Mutex
-	stations map[telemetry.StationID]*stationState
+	stations sync.Map
 }
 
 func NewRegistry(cfg Config, logger *slog.Logger) *Registry {
@@ -72,35 +82,32 @@ func NewRegistry(cfg Config, logger *slog.Logger) *Registry {
 	if cfg.CheckInterval <= 0 {
 		cfg.CheckInterval = defaults.CheckInterval
 	}
-	return &Registry{
-		cfg:      cfg,
-		logger:   logger,
-		stations: make(map[telemetry.StationID]*stationState),
-	}
+	return &Registry{cfg: cfg, logger: logger}
 }
 
 func (r *Registry) Observe(station telemetry.StationID) {
 	if station == "" {
 		return
 	}
-	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	state, ok := r.stations[station]
-	if !ok {
-		state = &stationState{rateSince: now}
-		r.stations[station] = state
-		r.logger.Info("station appeared", "station_id", station)
-		state.lastReported = StatusOnline
+	nowNano := time.Now().UnixNano()
+	state := r.load(station, nowNano)
+	state.samples.Add(1)
+	state.windowCount.Add(1)
+	state.lastSeen.Store(nowNano)
+}
+
+func (r *Registry) load(station telemetry.StationID, nowNano int64) *stationState {
+	if v, ok := r.stations.Load(station); ok {
+		return v.(*stationState)
 	}
-	state.lastSeen = now
-	state.samples++
-	state.rateSamples++
-	if window := now.Sub(state.rateSince); window >= 10*time.Second {
-		state.rate = float64(state.rateSamples) / window.Seconds()
-		state.rateSamples = 0
-		state.rateSince = now
+	fresh := &stationState{lastReported: StatusOnline}
+	fresh.windowStart.Store(nowNano)
+	fresh.lastSeen.Store(nowNano)
+	if actual, loaded := r.stations.LoadOrStore(station, fresh); loaded {
+		return actual.(*stationState)
 	}
+	r.logger.Info("station appeared", "station_id", station)
+	return fresh
 }
 
 func (r *Registry) Run(ctx context.Context) {
@@ -117,31 +124,37 @@ func (r *Registry) Run(ctx context.Context) {
 }
 
 func (r *Registry) reportTransitions(now time.Time) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for id, state := range r.stations {
-		if now.Sub(state.lastSeen) > r.cfg.ForgetAfter {
-			delete(r.stations, id)
-			continue
+	nowNano := now.UnixNano()
+	r.stations.Range(func(key, value any) bool {
+		id := key.(telemetry.StationID)
+		state := value.(*stationState)
+		if now.Sub(time.Unix(0, state.lastSeen.Load())) > r.cfg.ForgetAfter {
+			r.stations.Delete(id)
+			return true
 		}
-		status := r.statusLocked(state, now)
+		if nowNano-state.windowStart.Load() >= int64(rateWindow) {
+			state.windowStart.Store(nowNano)
+			state.windowCount.Store(0)
+		}
+		status := r.statusOf(state, now)
 		if status == state.lastReported {
-			continue
+			return true
 		}
 		switch status {
 		case StatusOnline:
 			r.logger.Info("station recovered", "station_id", id)
 		case StatusStale:
-			r.logger.Warn("station went silent", "station_id", id, "last_seen", state.lastSeen)
+			r.logger.Warn("station went silent", "station_id", id)
 		case StatusOffline:
-			r.logger.Error("station offline", "station_id", id, "last_seen", state.lastSeen)
+			r.logger.Error("station offline", "station_id", id)
 		}
 		state.lastReported = status
-	}
+		return true
+	})
 }
 
-func (r *Registry) statusLocked(state *stationState, now time.Time) Status {
-	age := now.Sub(state.lastSeen)
+func (r *Registry) statusOf(state *stationState, now time.Time) Status {
+	age := now.Sub(time.Unix(0, state.lastSeen.Load()))
 	switch {
 	case age <= r.cfg.OnlineWithin:
 		return StatusOnline
@@ -154,36 +167,32 @@ func (r *Registry) statusLocked(state *stationState, now time.Time) Status {
 
 func (r *Registry) Snapshot() []Info {
 	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	infos := make([]Info, 0, len(r.stations))
-	for id, state := range r.stations {
-		rate := state.rate
-		if window := now.Sub(state.rateSince); rate == 0 && window > 0 {
-			rate = float64(state.rateSamples) / window.Seconds()
-		}
+	nowNano := now.UnixNano()
+	infos := make([]Info, 0)
+	r.stations.Range(func(key, value any) bool {
+		state := value.(*stationState)
 		infos = append(infos, Info{
-			ID:            id,
-			Status:        r.statusLocked(state, now),
-			LastSeen:      state.lastSeen,
-			Samples:       state.samples,
-			RatePerSecond: rate,
+			ID:            key.(telemetry.StationID),
+			Status:        r.statusOf(state, now),
+			LastSeen:      time.Unix(0, state.lastSeen.Load()),
+			Samples:       state.samples.Load(),
+			RatePerSecond: math.Round(state.rate(nowNano)*10) / 10,
 		})
-	}
+		return true
+	})
 	sort.Slice(infos, func(i, j int) bool { return infos[i].ID < infos[j].ID })
 	return infos
 }
 
 func (r *Registry) Counts() (online, silent int) {
 	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, state := range r.stations {
-		if r.statusLocked(state, now) == StatusOnline {
+	r.stations.Range(func(_, value any) bool {
+		if r.statusOf(value.(*stationState), now) == StatusOnline {
 			online++
 		} else {
 			silent++
 		}
-	}
+		return true
+	})
 	return online, silent
 }
