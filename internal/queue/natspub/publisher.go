@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -53,11 +54,18 @@ func NewJetStream(ctx context.Context, conn *nats.Conn) (jetstream.JetStream, er
 	return js, nil
 }
 
+func storageFromEnv() jetstream.StorageType {
+	if os.Getenv("STREAM_STORAGE") == "memory" {
+		return jetstream.MemoryStorage
+	}
+	return jetstream.FileStorage
+}
+
 func ensureStream(ctx context.Context, js jetstream.JetStream) error {
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     StreamName,
 		Subjects: []string{"drone.>"},
-		Storage:  jetstream.FileStorage,
+		Storage:  storageFromEnv(),
 		MaxAge:   streamMaxAge,
 	})
 	if err != nil {
