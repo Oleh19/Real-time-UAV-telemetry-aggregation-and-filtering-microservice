@@ -2,7 +2,7 @@ services:
   certs:
     build: .
     user: '0:0'
-    entrypoint: ['/usr/local/bin/certgen', '-dir', '/certs', '-server-names', 'server,localhost']
+    entrypoint: ['/usr/local/bin/certgen', '-dir', '/certs', '-server-names', 'server,server-shard-1,localhost']
     volumes:
       - certs:/certs
     security_opt:
@@ -53,6 +53,8 @@ services:
       QUEUE_SIZE: '1024'
       STATE_TTL: '30s'
       PARTITION_COUNT: '${PARTITION_COUNT:-4}'
+      INSTANCE_ID: 's0'
+      SERVE_LIVE_API: 'true'
       INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
       TLS_CA_CERT: '/certs/ca.crt'
@@ -63,6 +65,47 @@ services:
     ports:
       - '50051:50051'
       - '8080:8080'
+    depends_on:
+      nats:
+        condition: service_healthy
+      certs:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/server', '-healthcheck']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    stop_grace_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: on-failure
+
+  server-shard-1:
+    build: .
+    entrypoint: ['/usr/local/bin/server']
+    environment:
+      GRPC_ADDR: ':50051'
+      HTTP_ADDR: ':8080'
+      NATS_URL: 'nats://nats:4222'
+      WORKER_COUNT: '8'
+      QUEUE_SIZE: '1024'
+      STATE_TTL: '30s'
+      PARTITION_COUNT: '${PARTITION_COUNT:-4}'
+      INSTANCE_ID: 's1'
+      SERVE_LIVE_API: 'false'
+      INGEST_TOKEN: '${INGEST_TOKEN:-dev-ingest-token}'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+      TLS_CA_CERT: '/certs/ca.crt'
+      TLS_SERVER_CERT: '/certs/server.crt'
+      TLS_SERVER_KEY: '/certs/server.key'
+    volumes:
+      - certs:/certs:ro
     depends_on:
       nats:
         condition: service_healthy
@@ -204,7 +247,7 @@ services:
     build: .
     entrypoint: ['/usr/local/bin/simulator']
     environment:
-      SERVER_ADDR: 'server:50051'
+      SERVER_ADDRS: '${SERVER_ADDRS:-server:50051,server-shard-1:50051}'
       DRONE_COUNT: '${DRONE_COUNT:-10}'
       STATION_COUNT: '${STATION_COUNT:-3}'
       OBS_NOISE_METERS: '${OBS_NOISE_METERS:-80}'

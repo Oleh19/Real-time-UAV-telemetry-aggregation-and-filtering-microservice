@@ -25,6 +25,7 @@ type Config struct {
 	TrackTTL          time.Duration
 	MergeWindow       time.Duration
 	Shards            int
+	IDPrefix          string
 }
 
 func DefaultConfig() Config {
@@ -36,6 +37,7 @@ func DefaultConfig() Config {
 		TrackTTL:          30 * time.Second,
 		MergeWindow:       3 * time.Second,
 		Shards:            defaultShards,
+		IDPrefix:          "target",
 	}
 }
 
@@ -103,6 +105,9 @@ func NewFuser(cfg Config) *Fuser {
 	if cfg.Shards <= 0 {
 		cfg.Shards = defaults.Shards
 	}
+	if cfg.IDPrefix == "" {
+		cfg.IDPrefix = defaults.IDPrefix
+	}
 	f := &Fuser{cfg: cfg}
 	fineCellDegrees := cfg.GateRadiusMeters / metersPerDegreeLat
 	f.shards = make([]*fuserShard, cfg.Shards)
@@ -164,7 +169,7 @@ func (s *fuserShard) trackForLocked(key observationKey, sample telemetry.Sample,
 		s.fuser.mergesTotal.Add(1)
 		return track, false
 	}
-	id := telemetry.DroneID(fmt.Sprintf("target-%03d", s.fuser.nextTrack.Add(1)))
+	id := telemetry.DroneID(fmt.Sprintf("%s-%03d", s.fuser.cfg.IDPrefix, s.fuser.nextTrack.Add(1)))
 	track := &fusedTrack{
 		id:           id,
 		filter:       newKalmanFilter(sample.Latitude, sample.Longitude, sample.Timestamp, s.fuser.cfg.MeasurementNoiseM, s.fuser.cfg.ProcessAccelMps2),

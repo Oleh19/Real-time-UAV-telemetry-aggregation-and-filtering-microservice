@@ -8,6 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"uavmonitor/internal/livetargets"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/sse"
 	"uavmonitor/internal/stations"
@@ -20,7 +21,15 @@ type telemetryEvent struct {
 	Stats  usecase.Stats      `json:"stats"`
 }
 
-func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry *stations.Registry, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
+type targetSnapshotter interface {
+	Snapshot() []telemetry.Sample
+}
+
+func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry *stations.Registry, liveTargets *livetargets.Store, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
+	var targets targetSnapshotter = ingestor
+	if liveTargets != nil {
+		targets = liveTargets
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		if natsConn.Status() != nats.CONNECTED {
@@ -36,7 +45,7 @@ func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPu
 	})
 	mux.HandleFunc("GET /drones", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, ingestor.Snapshot())
+		writeJSON(w, targets.Snapshot())
 	})
 	mux.HandleFunc("GET /stations", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -44,7 +53,7 @@ func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPu
 	})
 	mux.HandleFunc("GET /events", sse.Handler(sse.DefaultInterval, func(context.Context) any {
 		return telemetryEvent{
-			Drones: ingestor.Snapshot(),
+			Drones: targets.Snapshot(),
 			Stats:  metricsSnapshot(ingestor, publisher),
 		}
 	}, logger))

@@ -2,10 +2,22 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"uavmonitor/internal/env"
 )
+
+func splitAddrs(raw string) []string {
+	parts := strings.Split(raw, ",")
+	addrs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			addrs = append(addrs, trimmed)
+		}
+	}
+	return addrs
+}
 
 type Server struct {
 	GRPCAddr       string
@@ -16,10 +28,12 @@ type Server struct {
 	PartitionCount int
 	StateTTL       time.Duration
 	IngestToken    string
+	InstanceID     string
+	ServeLiveAPI   bool
 }
 
 type Simulator struct {
-	ServerAddr        string
+	ServerAddrs       []string
 	DroneCount        int
 	StationCount      int
 	ObservationNoiseM int
@@ -65,6 +79,10 @@ func LoadServer() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
+	serveLiveAPI, err := env.Bool("SERVE_LIVE_API", true)
+	if err != nil {
+		return Server{}, err
+	}
 	cfg := Server{
 		GRPCAddr:       env.String("GRPC_ADDR", ":50051"),
 		HTTPAddr:       env.String("HTTP_ADDR", ":8080"),
@@ -74,6 +92,8 @@ func LoadServer() (Server, error) {
 		PartitionCount: partitionCount,
 		StateTTL:       stateTTL,
 		IngestToken:    env.String("INGEST_TOKEN", ""),
+		InstanceID:     env.String("INSTANCE_ID", "target"),
+		ServeLiveAPI:   serveLiveAPI,
 	}
 	if cfg.PartitionCount < 1 {
 		return Server{}, fmt.Errorf("validate PARTITION_COUNT: must be >= 1, got %d", cfg.PartitionCount)
@@ -112,13 +132,16 @@ func LoadSimulator() (Simulator, error) {
 		return Simulator{}, err
 	}
 	cfg := Simulator{
-		ServerAddr:        env.String("SERVER_ADDR", "localhost:50051"),
+		ServerAddrs:       splitAddrs(env.String("SERVER_ADDRS", env.String("SERVER_ADDR", "localhost:50051"))),
 		DroneCount:        droneCount,
 		StationCount:      stationCount,
 		ObservationNoiseM: observationNoise,
 		SwarmSize:         swarmSize,
 		SendInterval:      sendInterval,
 		IngestToken:       env.String("INGEST_TOKEN", ""),
+	}
+	if len(cfg.ServerAddrs) == 0 {
+		return Simulator{}, fmt.Errorf("validate SERVER_ADDRS: must list at least one server")
 	}
 	if cfg.DroneCount < 1 {
 		return Simulator{}, fmt.Errorf("validate DRONE_COUNT: must be >= 1, got %d", cfg.DroneCount)

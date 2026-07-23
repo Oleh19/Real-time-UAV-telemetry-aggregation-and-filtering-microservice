@@ -141,6 +141,10 @@ func (d *Drone) ID() string {
 	return d.id
 }
 
+func (d *Drone) Position() (latitude, longitude float64) {
+	return d.latitude, d.longitude
+}
+
 func (d *Drone) Fly(ctx context.Context, interval time.Duration, emit func(*telemetryv1.DroneTelemetry) error, logger *slog.Logger) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

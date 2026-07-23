@@ -24,6 +24,8 @@ func TestLoadServer(t *testing.T) {
 				QueueSize:      1024,
 				PartitionCount: 4,
 				StateTTL:       5 * time.Minute,
+				InstanceID:     "target",
+				ServeLiveAPI:   true,
 			},
 		},
 		{
@@ -42,6 +44,8 @@ func TestLoadServer(t *testing.T) {
 				QueueSize:      16,
 				PartitionCount: 4,
 				StateTTL:       30 * time.Second,
+				InstanceID:     "target",
+				ServeLiveAPI:   true,
 			},
 		},
 		{

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -24,6 +26,7 @@ import (
 	"uavmonitor/internal/env"
 	"uavmonitor/internal/fusion"
 	"uavmonitor/internal/health"
+	"uavmonitor/internal/livetargets"
 	"uavmonitor/internal/mtls"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/stations"
@@ -32,6 +35,19 @@ import (
 )
 
 const maxIngestMessageBytes = 64 * 1024
+
+func newLiveConsumer(ctx context.Context, conn *nats.Conn) (jetstream.Consumer, error) {
+	js, err := natspub.NewJetStream(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	return js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
+		FilterSubjects:    []string{natspub.SubjectTelemetry + ".*"},
+		DeliverPolicy:     jetstream.DeliverNewPolicy,
+		AckPolicy:         jetstream.AckNonePolicy,
+		InactiveThreshold: time.Minute,
+	})
+}
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe the local health endpoint and exit")
@@ -72,7 +88,9 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	fuser := fusion.NewFuser(fusion.DefaultConfig())
+	fusionCfg := fusion.DefaultConfig()
+	fusionCfg.IDPrefix = cfg.InstanceID
+	fuser := fusion.NewFuser(fusionCfg)
 	hub := broadcast.NewHub(broadcast.DefaultSubscriberBuffer)
 	classifier := classify.NewClassifier()
 	stationRegistry := stations.NewRegistry(stations.DefaultConfig(), logger)
@@ -88,6 +106,21 @@ func run(logger *slog.Logger) error {
 	defer cancelWorkers()
 	ingestor.Start(workerCtx, cfg.WorkerCount)
 	go fuser.Run(workerCtx)
+
+	var liveTargets *livetargets.Store
+	if cfg.ServeLiveAPI {
+		liveTargets = livetargets.NewStore(cfg.StateTTL)
+		liveConsumer, err := newLiveConsumer(ctx, natsConn)
+		if err != nil {
+			return err
+		}
+		go func() {
+			if err := livetargets.Run(workerCtx, liveConsumer, liveTargets, logger); err != nil {
+				logger.Error("live target aggregator stopped", "error", err)
+			}
+		}()
+		go liveTargets.EvictLoop(workerCtx)
+	}
 
 	if cfg.IngestToken == "" {
 		logger.Warn("ingest authentication disabled: set INGEST_TOKEN to require a token")
@@ -127,7 +160,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, liveTargets, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

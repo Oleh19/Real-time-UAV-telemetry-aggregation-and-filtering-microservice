@@ -20,6 +20,7 @@ import (
 	"uavmonitor/gen/telemetryv1"
 	"uavmonitor/internal/config"
 	"uavmonitor/internal/mtls"
+	"uavmonitor/internal/partition"
 	"uavmonitor/internal/simulator"
 )
 
@@ -40,28 +41,31 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	transportCreds, secure, err := mtls.DialCredentials(mtls.FilesFromEnv(), serverName(cfg.ServerAddr))
-	if err != nil {
-		return err
-	}
-	dialOpts := []grpc.DialOption{transportCreds}
-	if cfg.IngestToken != "" {
-		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(ingestToken{token: cfg.IngestToken, secure: secure}))
-	}
-	conn, err := grpc.NewClient(cfg.ServerAddr, dialOpts...)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			logger.Error("close grpc connection", "error", err)
+	tlsFiles := mtls.FilesFromEnv()
+	router := clientRouter{clients: make([]telemetryv1.TelemetryServiceClient, 0, len(cfg.ServerAddrs))}
+	for _, addr := range cfg.ServerAddrs {
+		transportCreds, secure, err := mtls.DialCredentials(tlsFiles, serverName(addr))
+		if err != nil {
+			return err
 		}
-	}()
-
-	client := telemetryv1.NewTelemetryServiceClient(conn)
+		dialOpts := []grpc.DialOption{transportCreds}
+		if cfg.IngestToken != "" {
+			dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(ingestToken{token: cfg.IngestToken, secure: secure}))
+		}
+		conn, err := grpc.NewClient(addr, dialOpts...)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := conn.Close(); err != nil {
+				logger.Error("close grpc connection", "error", err)
+			}
+		}()
+		router.clients = append(router.clients, telemetryv1.NewTelemetryServiceClient(conn))
+	}
 
 	logger.Info("simulator starting",
-		"server_addr", cfg.ServerAddr,
+		"server_addrs", cfg.ServerAddrs,
 		"max_concurrent_drones", cfg.DroneCount,
 		"stations", cfg.StationCount,
 		"observation_noise_m", cfg.ObservationNoiseM,
@@ -72,12 +76,12 @@ func run(logger *slog.Logger) error {
 	var wg sync.WaitGroup
 	for slot := range cfg.DroneCount {
 		wg.Go(func() {
-			runDroneSlot(ctx, client, cfg, slot, &droneIDs, logger)
+			runDroneSlot(ctx, router, cfg, slot, &droneIDs, logger)
 		})
 	}
 	if cfg.SwarmSize >= 2 {
 		wg.Go(func() {
-			runSwarmSlot(ctx, client, cfg, &droneIDs, logger)
+			runSwarmSlot(ctx, router, cfg, &droneIDs, logger)
 		})
 	}
 	wg.Wait()
@@ -104,7 +108,15 @@ func serverName(addr string) string {
 	return addr
 }
 
-func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
+type clientRouter struct {
+	clients []telemetryv1.TelemetryServiceClient
+}
+
+func (r clientRouter) forPosition(latitude, longitude float64) telemetryv1.TelemetryServiceClient {
+	return r.clients[partition.Of(latitude, longitude, len(r.clients))]
+}
+
+func runDroneSlot(ctx context.Context, router clientRouter, cfg config.Simulator, slot int, droneIDs *atomic.Int64, logger *slog.Logger) {
 	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(slot)))
 	for {
 		respawnDelay := time.Duration(2+rng.IntN(28)) * time.Second
@@ -114,6 +126,7 @@ func runDroneSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient
 		case <-time.After(respawnDelay):
 		}
 		drone := simulator.NewDrone(int(droneIDs.Add(1)), rng)
+		client := router.forPosition(drone.Position())
 		if err := flyThroughStations(ctx, client, cfg, drone, rng, logger); err != nil {
 			if ctx.Err() != nil {
 				return
@@ -171,7 +184,7 @@ func flyThroughStations(ctx context.Context, client telemetryv1.TelemetryService
 	return flyErr
 }
 
-func runSwarmSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient, cfg config.Simulator, droneIDs *atomic.Int64, logger *slog.Logger) {
+func runSwarmSlot(ctx context.Context, router clientRouter, cfg config.Simulator, droneIDs *atomic.Int64, logger *slog.Logger) {
 	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0x5747524d))
 	for {
 		respawnDelay := time.Duration(5+rng.IntN(25)) * time.Second
@@ -185,6 +198,7 @@ func runSwarmSlot(ctx context.Context, client telemetryv1.TelemetryServiceClient
 		for range cfg.SwarmSize - 1 {
 			members = append(members, simulator.NewSwarmMember(int(droneIDs.Add(1)), rng))
 		}
+		client := router.forPosition(leader.Position())
 		logger.Info("swarm launched", "leader", leader.ID(), "size", cfg.SwarmSize)
 		if err := flySwarm(ctx, client, cfg, leader, members, rng, logger); err != nil {
 			if ctx.Err() != nil {

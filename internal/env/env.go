@@ -14,6 +14,18 @@ func String(key, fallback string) string {
 	return fallback
 }
 
+func Bool(key string, fallback bool) (bool, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("parse %s: %w", key, err)
+	}
+	return parsed, nil
+}
+
 func Int(key string, fallback int) (int, error) {
 	v, ok := os.LookupEnv(key)
 	if !ok || v == "" {
