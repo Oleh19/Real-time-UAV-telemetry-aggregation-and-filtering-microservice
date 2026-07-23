@@ -137,7 +137,7 @@ func run(logger *slog.Logger) error {
 			Time:    2 * time.Minute,
 			Timeout: 20 * time.Second,
 		}),
-		grpc.MaxConcurrentStreams(512),
+		grpc.MaxConcurrentStreams(cfg.MaxConcurrentStreams),
 	}
 	tlsFiles := mtls.FilesFromEnv()
 	if tlsFiles.ServerEnabled() {

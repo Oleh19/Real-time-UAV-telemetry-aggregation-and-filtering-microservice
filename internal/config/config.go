@@ -20,16 +20,17 @@ func splitAddrs(raw string) []string {
 }
 
 type Server struct {
-	GRPCAddr       string
-	HTTPAddr       string
-	NATSURL        string
-	WorkerCount    int
-	QueueSize      int
-	PartitionCount int
-	StateTTL       time.Duration
-	IngestToken    string
-	InstanceID     string
-	ServeLiveAPI   bool
+	GRPCAddr             string
+	HTTPAddr             string
+	NATSURL              string
+	WorkerCount          int
+	QueueSize            int
+	PartitionCount       int
+	StateTTL             time.Duration
+	IngestToken          string
+	InstanceID           string
+	ServeLiveAPI         bool
+	MaxConcurrentStreams uint32
 }
 
 type Simulator struct {
@@ -83,17 +84,25 @@ func LoadServer() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
+	maxStreams, err := env.Int("MAX_CONCURRENT_STREAMS", 512)
+	if err != nil {
+		return Server{}, err
+	}
 	cfg := Server{
-		GRPCAddr:       env.String("GRPC_ADDR", ":50051"),
-		HTTPAddr:       env.String("HTTP_ADDR", ":8080"),
-		NATSURL:        env.String("NATS_URL", "nats://localhost:4222"),
-		WorkerCount:    workerCount,
-		QueueSize:      queueSize,
-		PartitionCount: partitionCount,
-		StateTTL:       stateTTL,
-		IngestToken:    env.String("INGEST_TOKEN", ""),
-		InstanceID:     env.String("INSTANCE_ID", "target"),
-		ServeLiveAPI:   serveLiveAPI,
+		GRPCAddr:             env.String("GRPC_ADDR", ":50051"),
+		HTTPAddr:             env.String("HTTP_ADDR", ":8080"),
+		NATSURL:              env.String("NATS_URL", "nats://localhost:4222"),
+		WorkerCount:          workerCount,
+		QueueSize:            queueSize,
+		PartitionCount:       partitionCount,
+		StateTTL:             stateTTL,
+		IngestToken:          env.String("INGEST_TOKEN", ""),
+		InstanceID:           env.String("INSTANCE_ID", "target"),
+		ServeLiveAPI:         serveLiveAPI,
+		MaxConcurrentStreams: uint32(maxStreams),
+	}
+	if maxStreams < 1 {
+		return Server{}, fmt.Errorf("validate MAX_CONCURRENT_STREAMS: must be >= 1, got %d", maxStreams)
 	}
 	if cfg.PartitionCount < 1 {
 		return Server{}, fmt.Errorf("validate PARTITION_COUNT: must be >= 1, got %d", cfg.PartitionCount)
