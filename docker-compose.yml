@@ -2,7 +2,14 @@ services:
   certs:
     build: .
     user: '0:0'
-    entrypoint: ['/usr/local/bin/certgen', '-dir', '/certs', '-server-names', 'server,server-shard-1,localhost']
+    entrypoint:
+      [
+        '/usr/local/bin/certgen',
+        '-dir',
+        '/certs',
+        '-server-names',
+        'server,server-shard-1,localhost',
+      ]
     volumes:
       - certs:/certs
     security_opt:
