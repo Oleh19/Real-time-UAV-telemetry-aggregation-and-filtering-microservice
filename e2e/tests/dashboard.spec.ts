@@ -59,6 +59,39 @@ test('toggles between light and dark themes', async ({ page }) => {
   await expect.poll(async () => root.getAttribute('data-theme')).not.toBe(before);
 });
 
+test('highlights a custom zone while a drone is inside it', async ({ page }) => {
+  await page.route('**/api/custom-zones', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { id: 5000001, name: 'Test zone' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [30.4, 50.3],
+                  [30.6, 50.3],
+                  [30.6, 50.5],
+                  [30.4, 50.5],
+                  [30.4, 50.3],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    }),
+  );
+
+  await page.goto('/');
+
+  await expect(page.locator('path[stroke="#d64545"]').first()).toBeVisible({ timeout: 10000 });
+});
+
 test('filters the target table', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: 'Targets' }).click();
