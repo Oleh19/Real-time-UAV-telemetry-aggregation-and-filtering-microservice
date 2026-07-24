@@ -1,18 +1,52 @@
 <section class="panel" aria-label="Tracked targets">
   <header class="panel-header">
     <h2>Tracked targets</h2>
-    <span class="count">{{ rows().length }}</span>
+    <span class="count">{{ rows().length }} / {{ total() }}</span>
   </header>
+  <div class="controls">
+    <label class="search">
+      <span class="sr-only">Search targets</span>
+      <input
+        type="search"
+        placeholder="Search id or class…"
+        [value]="query()"
+        (input)="setQuery($any($event.target).value)"
+      />
+    </label>
+    <div class="filters" role="group" aria-label="Filter targets">
+      @for (option of filters; track option.id) {
+        <button
+          type="button"
+          class="filter-option"
+          [class.filter-option-active]="filter() === option.id"
+          [attr.aria-pressed]="filter() === option.id"
+          (click)="setFilter(option.id)"
+        >
+          {{ option.label }}
+        </button>
+      }
+    </div>
+  </div>
   @if (rows().length > 0) {
     <table class="targets">
       <thead>
         <tr>
-          <th scope="col">Target</th>
+          <th scope="col" [attr.aria-sort]="ariaSort('DroneID')">
+            <button type="button" class="sort" (click)="sortBy('DroneID')">Target</button>
+          </th>
           <th scope="col">Class</th>
-          <th scope="col">Alt, m</th>
-          <th scope="col">Speed, m/s</th>
-          <th scope="col">Track</th>
-          <th scope="col">Quality</th>
+          <th scope="col" [attr.aria-sort]="ariaSort('Altitude')">
+            <button type="button" class="sort" (click)="sortBy('Altitude')">Alt, m</button>
+          </th>
+          <th scope="col" [attr.aria-sort]="ariaSort('Speed')">
+            <button type="button" class="sort" (click)="sortBy('Speed')">Speed, m/s</button>
+          </th>
+          <th scope="col" [attr.aria-sort]="ariaSort('Confidence')">
+            <button type="button" class="sort" (click)="sortBy('Confidence')">Track</button>
+          </th>
+          <th scope="col" [attr.aria-sort]="ariaSort('Quality')">
+            <button type="button" class="sort" (click)="sortBy('Quality')">Quality</button>
+          </th>
           <th scope="col">Updated</th>
         </tr>
       </thead>
@@ -52,6 +86,6 @@
       </tbody>
     </table>
   } @else {
-    <p class="placeholder">No targets tracked</p>
+    <p class="placeholder">No targets match</p>
   }
 </section>

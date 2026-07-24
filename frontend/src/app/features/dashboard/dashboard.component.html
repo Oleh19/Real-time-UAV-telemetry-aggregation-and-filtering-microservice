@@ -4,14 +4,54 @@
     <app-playback-panel />
   </div>
   <aside class="side-pane">
-    <app-metrics-panel />
-    <app-threat-panel />
-    <app-station-panel />
-    <app-oblast-panel />
-    <app-swarm-panel />
-    <app-zone-panel />
-    <app-heatmap-panel />
-    <app-breach-feed />
-    <app-drone-list />
+    <div class="tabs" role="tablist" aria-label="Dashboard panels">
+      @for (tab of tabs; track tab.id) {
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          [class.tab-active]="activeTab() === tab.id"
+          [attr.aria-selected]="activeTab() === tab.id"
+          [id]="'tab-' + tab.id"
+          [attr.aria-controls]="'panel-' + tab.id"
+          (click)="select(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      }
+    </div>
+    <div class="tab-body">
+      @switch (activeTab()) {
+        @case ('threats') {
+          <div role="tabpanel" id="panel-threats" aria-labelledby="tab-threats">
+            <app-threat-panel />
+          </div>
+        }
+        @case ('picture') {
+          <div role="tabpanel" id="panel-picture" aria-labelledby="tab-picture">
+            <app-metrics-panel />
+            <app-oblast-panel />
+            <app-station-panel />
+          </div>
+        }
+        @case ('targets') {
+          <div role="tabpanel" id="panel-targets" aria-labelledby="tab-targets">
+            <app-drone-list />
+          </div>
+        }
+        @case ('zones') {
+          <div role="tabpanel" id="panel-zones" aria-labelledby="tab-zones">
+            <app-zone-panel />
+            <app-swarm-panel />
+            <app-heatmap-panel />
+          </div>
+        }
+        @case ('events') {
+          <div role="tabpanel" id="panel-events" aria-labelledby="tab-events">
+            <app-breach-feed />
+          </div>
+        }
+      }
+    </div>
   </aside>
 </div>

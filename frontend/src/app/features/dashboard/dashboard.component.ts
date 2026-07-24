@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
 import { HeatmapPanelComponent } from './analytics/heatmap-panel.component';
 import { BreachFeedComponent } from './breaches/breach-feed.component';
@@ -11,6 +11,13 @@ import { StationPanelComponent } from './stations/station-panel.component';
 import { SwarmPanelComponent } from './swarms/swarm-panel.component';
 import { ThreatPanelComponent } from './threats/threat-panel.component';
 import { ZonePanelComponent } from './zones/zone-panel.component';
+
+type SideTab = 'threats' | 'picture' | 'targets' | 'zones' | 'events';
+
+interface TabDef {
+  id: SideTab;
+  label: string;
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -31,4 +38,17 @@ import { ZonePanelComponent } from './zones/zone-panel.component';
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
-export class DashboardComponent {}
+export class DashboardComponent {
+  protected readonly tabs: readonly TabDef[] = [
+    { id: 'threats', label: 'Threats' },
+    { id: 'picture', label: 'Air picture' },
+    { id: 'targets', label: 'Targets' },
+    { id: 'zones', label: 'Zones' },
+    { id: 'events', label: 'Events' },
+  ];
+  protected readonly activeTab = signal<SideTab>('threats');
+
+  protected select(tab: SideTab): void {
+    this.activeTab.set(tab);
+  }
+}
