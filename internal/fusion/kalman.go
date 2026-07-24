@@ -150,4 +150,8 @@ func (k *kalmanFilter) speed() float64 {
 	return math.Hypot(k.state[2], k.state[3])
 }
 
+func (k *kalmanFilter) positionUncertainty() float64 {
+	return math.Sqrt(k.covariance[0][0] + k.covariance[1][1])
+}
+
 const metersPerDegreeEquator = 111320.0

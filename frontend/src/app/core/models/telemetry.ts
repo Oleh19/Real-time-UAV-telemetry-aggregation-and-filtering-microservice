@@ -9,6 +9,7 @@ export interface DroneSample {
   Altitude: number;
   Speed: number;
   Confidence: number;
+  Quality: number;
 }
 
 export interface IngestStats {

@@ -15,6 +15,7 @@ function samplePoint(overrides: Partial<DroneSample> = {}): DroneSample {
     Altitude: 120,
     Speed: 20,
     Confidence: 90,
+    Quality: 80,
     ...overrides,
   };
 }

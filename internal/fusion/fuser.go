@@ -268,6 +268,7 @@ func (s *fuserShard) fusedSampleLocked(track *fusedTrack, timestamp time.Time, n
 		Latitude:  latitude,
 		Longitude: longitude,
 		Speed:     float32(track.filter.speed()),
+		Quality:   telemetry.QualityFromUncertainty(track.filter.positionUncertainty()),
 	}
 	cutoff := now.Add(-s.fuser.cfg.MergeWindow)
 	var altitudeSum float64

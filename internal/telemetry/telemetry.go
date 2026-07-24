@@ -45,6 +45,18 @@ type Sample struct {
 	Altitude   float64
 	Speed      float32
 	Confidence int32
+	Quality    int32
+}
+
+func QualityFromUncertainty(uncertaintyMeters float64) int32 {
+	quality := 100 - uncertaintyMeters/5
+	if quality < 0 {
+		return 0
+	}
+	if quality > 100 {
+		return 100
+	}
+	return int32(quality)
 }
 
 func (s Sample) Validate() error {

@@ -16,6 +16,7 @@ message DroneTelemetry {
   int32 confidence = 7;
   string station_id = 8;
   string classification = 9;
+  int32 quality = 10;
 }
 
 enum BreachEvent {

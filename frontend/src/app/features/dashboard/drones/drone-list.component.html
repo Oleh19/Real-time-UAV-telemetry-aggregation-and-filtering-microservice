@@ -12,6 +12,7 @@
           <th scope="col">Alt, m</th>
           <th scope="col">Speed, m/s</th>
           <th scope="col">Track</th>
+          <th scope="col">Quality</th>
           <th scope="col">Updated</th>
         </tr>
       </thead>
@@ -32,6 +33,7 @@
             <td>
               <span [class]="row.confidenceClass">{{ row.Confidence }}%</span>
             </td>
+            <td>{{ row.Quality }}%</td>
             <td>{{ row.Timestamp | date: 'HH:mm:ss' }}</td>
           </tr>
         }
