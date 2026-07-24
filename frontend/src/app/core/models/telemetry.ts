@@ -10,6 +10,7 @@ export interface DroneSample {
   Speed: number;
   Confidence: number;
   Quality: number;
+  Anomaly: boolean;
 }
 
 export interface IngestStats {

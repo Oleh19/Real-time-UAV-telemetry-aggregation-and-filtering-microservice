@@ -46,6 +46,7 @@ type Sample struct {
 	Speed      float32
 	Confidence int32
 	Quality    int32
+	Anomaly    bool
 }
 
 func QualityFromUncertainty(uncertaintyMeters float64) int32 {

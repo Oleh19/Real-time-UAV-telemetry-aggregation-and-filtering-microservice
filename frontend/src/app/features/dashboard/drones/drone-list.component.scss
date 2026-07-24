@@ -96,3 +96,13 @@
   color: var(--color-danger);
   font-weight: 600;
 }
+
+.anomaly-badge {
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-danger);
+  color: var(--color-text);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}

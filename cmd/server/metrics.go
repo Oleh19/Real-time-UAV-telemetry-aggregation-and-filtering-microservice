@@ -35,7 +35,11 @@ type stationStats interface {
 	Counts() (online, silent int)
 }
 
-func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry stationStats) http.Handler {
+type anomalyStats interface {
+	Total() int64
+}
+
+func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCounter, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry stationStats, anomaly anomalyStats) http.Handler {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -73,6 +77,8 @@ func newMetricsHandler(ingestor *usecase.Ingestor, publisher publishFailureCount
 		func() int64 { online, _ := stationRegistry.Counts(); return int64(online) })
 	registerGauge(registry, "uav_stations_silent", "Known detection stations that stopped reporting.",
 		func() int64 { _, silent := stationRegistry.Counts(); return int64(silent) })
+	registerCounter(registry, "uav_anomalies_total", "Telemetry samples flagged as implausible (possible spoofing).",
+		anomaly.Total)
 	for _, class := range []telemetry.TargetClass{
 		telemetry.ClassLoiteringMunition,
 		telemetry.ClassReconUAV,

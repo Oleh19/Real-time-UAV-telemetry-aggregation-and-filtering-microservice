@@ -355,7 +355,8 @@ function confidenceColor(level: number): string {
 
 function tooltipFor(drone: DroneSample, prediction?: DronePrediction): string {
   const kind = drone.Class || 'unknown';
-  const base = `${drone.DroneID} · ${kind} · ${Math.round(drone.Altitude)} m · track ${drone.Confidence}%`;
+  const spoof = drone.Anomaly ? ' · ⚠ spoof?' : '';
+  const base = `${drone.DroneID} · ${kind}${spoof} · ${Math.round(drone.Altitude)} m · track ${drone.Confidence}% · q${drone.Quality}`;
   if (!prediction?.eta) {
     return base;
   }

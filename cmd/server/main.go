@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/anomaly"
 	"uavmonitor/internal/broadcast"
 	"uavmonitor/internal/classify"
 	"uavmonitor/internal/config"
@@ -101,11 +102,13 @@ func run(logger *slog.Logger) error {
 	hub := broadcast.NewHub(broadcast.DefaultSubscriberBuffer)
 	classifier := classify.NewClassifier()
 	stationRegistry := stations.NewRegistry(stations.DefaultConfig(), logger)
+	anomalyDetector := anomaly.NewDetector()
 	ingestor := usecase.NewIngestor(publisher, logger, cfg.QueueSize, cfg.StateTTL,
 		usecase.WithResolver(fuser),
 		usecase.WithBroadcaster(hub),
 		usecase.WithClassifier(classifier),
 		usecase.WithStationObserver(stationRegistry),
+		usecase.WithAnomalyDetector(anomalyDetector),
 	)
 	go stationRegistry.Run(ctx)
 
@@ -167,7 +170,7 @@ func run(logger *slog.Logger) error {
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, liveTargets, natsConn, logger),
+		Handler:           observabilityHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, anomalyDetector, liveTargets, natsConn, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

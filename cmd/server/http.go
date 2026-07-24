@@ -25,7 +25,7 @@ type targetSnapshotter interface {
 	Snapshot() []telemetry.Sample
 }
 
-func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry *stations.Registry, liveTargets *livetargets.Store, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
+func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPublisher, fuser fusionStats, hub hubStats, classifier classifierStats, stationRegistry *stations.Registry, anomaly anomalyStats, liveTargets *livetargets.Store, natsConn *nats.Conn, logger *slog.Logger) http.Handler {
 	var targets targetSnapshotter = ingestor
 	if liveTargets != nil {
 		targets = liveTargets
@@ -38,7 +38,7 @@ func observabilityHandler(ingestor *usecase.Ingestor, publisher *natspub.AsyncPu
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.Handle("GET /metrics", newMetricsHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry))
+	mux.Handle("GET /metrics", newMetricsHandler(ingestor, publisher, fuser, hub, classifier, stationRegistry, anomaly))
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		writeJSON(w, metricsSnapshot(ingestor, publisher))

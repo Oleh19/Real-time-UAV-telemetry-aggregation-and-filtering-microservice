@@ -38,6 +38,10 @@ type StationObserver interface {
 	Observe(station telemetry.StationID)
 }
 
+type AnomalyDetector interface {
+	Check(sample telemetry.Sample) bool
+}
+
 type Option func(*Ingestor)
 
 func WithResolver(resolver TrackResolver) Option {
@@ -64,6 +68,12 @@ func WithStationObserver(observer StationObserver) Option {
 	}
 }
 
+func WithAnomalyDetector(detector AnomalyDetector) Option {
+	return func(i *Ingestor) {
+		i.anomaly = detector
+	}
+}
+
 type lastEntry struct {
 	sample   telemetry.Sample
 	storedAt time.Time
@@ -75,6 +85,7 @@ type Ingestor struct {
 	broadcaster Broadcaster
 	classifier  Classifier
 	stations    StationObserver
+	anomaly     AnomalyDetector
 	logger      *slog.Logger
 	queue       chan telemetry.Sample
 	done        chan struct{}
@@ -197,6 +208,9 @@ func (i *Ingestor) Submit(ctx context.Context, sample telemetry.Sample) error {
 	}
 	if i.classifier != nil {
 		sample.Class = i.classifier.Classify(sample)
+	}
+	if i.anomaly != nil {
+		sample.Anomaly = i.anomaly.Check(sample)
 	}
 	i.storeLastKnown(sample)
 	select {

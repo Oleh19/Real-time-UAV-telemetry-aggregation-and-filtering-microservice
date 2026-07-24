@@ -124,5 +124,6 @@ func decode(payload []byte) (telemetry.Sample, bool) {
 		Speed:      pb.GetSpeed(),
 		Confidence: pb.GetConfidence(),
 		Quality:    pb.GetQuality(),
+		Anomaly:    pb.GetAnomaly(),
 	}, true
 }

@@ -17,6 +17,7 @@ message DroneTelemetry {
   string station_id = 8;
   string classification = 9;
   int32 quality = 10;
+  bool anomaly = 11;
 }
 
 enum BreachEvent {

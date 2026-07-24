@@ -83,6 +83,7 @@ type DroneTelemetry struct {
 	StationId      string                 `protobuf:"bytes,8,opt,name=station_id,json=stationId,proto3" json:"station_id,omitempty"`
 	Classification string                 `protobuf:"bytes,9,opt,name=classification,proto3" json:"classification,omitempty"`
 	Quality        int32                  `protobuf:"varint,10,opt,name=quality,proto3" json:"quality,omitempty"`
+	Anomaly        bool                   `protobuf:"varint,11,opt,name=anomaly,proto3" json:"anomaly,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -185,6 +186,13 @@ func (x *DroneTelemetry) GetQuality() int32 {
 		return x.Quality
 	}
 	return 0
+}
+
+func (x *DroneTelemetry) GetAnomaly() bool {
+	if x != nil {
+		return x.Anomaly
+	}
+	return false
 }
 
 type ZoneBreach struct {
@@ -403,7 +411,7 @@ var File_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_v1_telemetry_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd2\x02\n" +
+	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xec\x02\n" +
 	"\x0eDroneTelemetry\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1a\n" +
@@ -418,7 +426,8 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"station_id\x18\b \x01(\tR\tstationId\x12&\n" +
 	"\x0eclassification\x18\t \x01(\tR\x0eclassification\x12\x18\n" +
 	"\aquality\x18\n" +
-	" \x01(\x05R\aquality\"\x9e\x02\n" +
+	" \x01(\x05R\aquality\x12\x18\n" +
+	"\aanomaly\x18\v \x01(\bR\aanomaly\"\x9e\x02\n" +
 	"\n" +
 	"ZoneBreach\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x12\x17\n" +
