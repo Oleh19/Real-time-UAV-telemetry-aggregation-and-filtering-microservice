@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,10 +13,17 @@ import (
 )
 
 const (
-	defaultShards      = 16
+	minShards          = 16
 	coarseCellDegrees  = 1.0
 	metersPerDegreeLat = 111320.0
 )
+
+func defaultShards() int {
+	if procs := runtime.GOMAXPROCS(0); procs > minShards {
+		return procs
+	}
+	return minShards
+}
 
 type Config struct {
 	GateRadiusMeters  float64
@@ -36,7 +44,7 @@ func DefaultConfig() Config {
 		ProcessAccelMps2:  4,
 		TrackTTL:          30 * time.Second,
 		MergeWindow:       3 * time.Second,
-		Shards:            defaultShards,
+		Shards:            defaultShards(),
 		IDPrefix:          "target",
 	}
 }

@@ -76,7 +76,7 @@ func LoadServer() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	partitionCount, err := env.Int("PARTITION_COUNT", 4)
+	partitionCount, err := env.Int("PARTITION_COUNT", 16)
 	if err != nil {
 		return Server{}, err
 	}
@@ -211,7 +211,7 @@ func LoadGeofence() (Geofence, error) {
 	if err != nil {
 		return Geofence{}, err
 	}
-	partitionCount, err := env.Int("PARTITION_COUNT", 4)
+	partitionCount, err := env.Int("PARTITION_COUNT", 16)
 	if err != nil {
 		return Geofence{}, err
 	}
