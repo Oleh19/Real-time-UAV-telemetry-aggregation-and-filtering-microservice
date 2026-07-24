@@ -36,6 +36,8 @@ func newMetricsHandler(dispatcher *notify.Dispatcher) http.Handler {
 		dispatcher.FailedTotal)
 	registerCounter(registry, "uav_notifications_skipped_total", "Alerts skipped without dispatch.",
 		dispatcher.SkippedTotal)
+	registerCounter(registry, "uav_notifications_throttled_total", "Alerts suppressed by the per-target cooldown.",
+		dispatcher.ThrottledTotal)
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 

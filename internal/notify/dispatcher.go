@@ -19,27 +19,33 @@ import (
 const redeliveryDelay = 5 * time.Second
 
 type Dispatcher struct {
-	sinks        []Sink
-	logger       *slog.Logger
-	notifyOnExit bool
-	timeout      time.Duration
-	sentTotal    atomic.Int64
-	failedTotal  atomic.Int64
-	skippedTotal atomic.Int64
+	sinks          []Sink
+	logger         *slog.Logger
+	notifyOnExit   bool
+	timeout        time.Duration
+	cooldown       *cooldownGate
+	now            func() time.Time
+	sentTotal      atomic.Int64
+	failedTotal    atomic.Int64
+	skippedTotal   atomic.Int64
+	throttledTotal atomic.Int64
 }
 
-func NewDispatcher(sinks []Sink, notifyOnExit bool, timeout time.Duration, logger *slog.Logger) *Dispatcher {
+func NewDispatcher(sinks []Sink, notifyOnExit bool, cooldown, timeout time.Duration, logger *slog.Logger) *Dispatcher {
 	return &Dispatcher{
 		sinks:        sinks,
 		logger:       logger,
 		notifyOnExit: notifyOnExit,
 		timeout:      timeout,
+		cooldown:     newCooldownGate(cooldown),
+		now:          time.Now,
 	}
 }
 
-func (d *Dispatcher) SentTotal() int64    { return d.sentTotal.Load() }
-func (d *Dispatcher) FailedTotal() int64  { return d.failedTotal.Load() }
-func (d *Dispatcher) SkippedTotal() int64 { return d.skippedTotal.Load() }
+func (d *Dispatcher) SentTotal() int64      { return d.sentTotal.Load() }
+func (d *Dispatcher) FailedTotal() int64    { return d.failedTotal.Load() }
+func (d *Dispatcher) SkippedTotal() int64   { return d.skippedTotal.Load() }
+func (d *Dispatcher) ThrottledTotal() int64 { return d.throttledTotal.Load() }
 
 func (d *Dispatcher) Run(ctx context.Context, consumers []jetstream.Consumer) error {
 	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
@@ -67,6 +73,13 @@ func (d *Dispatcher) handle(ctx context.Context, msg jetstream.Msg) {
 		d.skippedTotal.Add(1)
 		if err := msg.Ack(); err != nil {
 			d.logger.Error("ack skipped alert", "error", err)
+		}
+		return
+	}
+	if !d.cooldown.allow(cooldownKey(breach), d.now()) {
+		d.throttledTotal.Add(1)
+		if err := msg.Ack(); err != nil {
+			d.logger.Error("ack throttled alert", "error", err)
 		}
 		return
 	}
@@ -110,6 +123,10 @@ func (d *Dispatcher) sinkNames() []string {
 		names = append(names, sink.Name())
 	}
 	return names
+}
+
+func cooldownKey(breach telemetry.ZoneBreach) string {
+	return fmt.Sprintf("%s|%d|%s", breach.Sample.DroneID, breach.Zone.ID, breach.Event)
 }
 
 func decodeBreach(payload []byte, logger *slog.Logger) (telemetry.ZoneBreach, bool) {

@@ -69,6 +69,7 @@ type Notifier struct {
 	DurableName     string
 	NotifyOnExit    bool
 	RequestTimeout  time.Duration
+	Cooldown        time.Duration
 	WebhookURL      string
 	TelegramToken   string
 	TelegramChatID  string
@@ -191,12 +192,17 @@ func LoadNotifier() (Notifier, error) {
 	if err != nil {
 		return Notifier{}, err
 	}
+	cooldown, err := env.Duration("NOTIFY_COOLDOWN", time.Minute)
+	if err != nil {
+		return Notifier{}, err
+	}
 	cfg := Notifier{
 		NATSURL:         env.String("NATS_URL", "nats://localhost:4222"),
 		HTTPAddr:        env.String("HTTP_ADDR", ":8082"),
 		DurableName:     env.String("NOTIFY_DURABLE", "notifier"),
 		NotifyOnExit:    notifyOnExit,
 		RequestTimeout:  requestTimeout,
+		Cooldown:        cooldown,
 		WebhookURL:      env.String("WEBHOOK_URL", ""),
 		TelegramToken:   env.String("TELEGRAM_BOT_TOKEN", ""),
 		TelegramChatID:  env.String("TELEGRAM_CHAT_ID", ""),
@@ -204,6 +210,9 @@ func LoadNotifier() (Notifier, error) {
 	}
 	if cfg.RequestTimeout < time.Second {
 		return Notifier{}, fmt.Errorf("validate NOTIFY_REQUEST_TIMEOUT: must be >= 1s, got %s", cfg.RequestTimeout)
+	}
+	if cfg.Cooldown < 0 {
+		return Notifier{}, fmt.Errorf("validate NOTIFY_COOLDOWN: must be >= 0, got %s", cfg.Cooldown)
 	}
 	if cfg.TelegramToken != "" && cfg.TelegramChatID == "" {
 		return Notifier{}, fmt.Errorf("validate TELEGRAM_CHAT_ID: required when TELEGRAM_BOT_TOKEN is set")

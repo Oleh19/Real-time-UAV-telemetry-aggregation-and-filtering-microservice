@@ -109,10 +109,38 @@ func (s *recordingSink) Send(_ context.Context, notification Notification) error
 	return nil
 }
 
+func TestCooldownGateSuppressesRepeatsWithinWindow(t *testing.T) {
+	gate := newCooldownGate(time.Minute)
+	base := time.Unix(1700000000, 0).UTC()
+
+	if !gate.allow("drone-1|7|entered", base) {
+		t.Fatal("first alert should pass the cooldown gate")
+	}
+	if gate.allow("drone-1|7|entered", base.Add(30*time.Second)) {
+		t.Fatal("repeat within the window should be suppressed")
+	}
+	if !gate.allow("drone-1|7|exited", base.Add(30*time.Second)) {
+		t.Fatal("a different event should pass independently")
+	}
+	if !gate.allow("drone-1|7|entered", base.Add(90*time.Second)) {
+		t.Fatal("alert after the window should pass again")
+	}
+}
+
+func TestCooldownGateDisabledWhenWindowZero(t *testing.T) {
+	gate := newCooldownGate(0)
+	base := time.Unix(1700000000, 0).UTC()
+	for n := range 3 {
+		if !gate.allow("k", base) {
+			t.Fatalf("a zero window must never suppress (attempt %d)", n)
+		}
+	}
+}
+
 func TestDispatchReportsSuccessWhenAllSinksSucceed(t *testing.T) {
 	first := &recordingSink{name: "a"}
 	second := &recordingSink{name: "b"}
-	d := NewDispatcher([]Sink{first, second}, false, time.Second, discardLogger())
+	d := NewDispatcher([]Sink{first, second}, false, 0, time.Second, discardLogger())
 
 	if !d.dispatch(context.Background(), FromBreach(sampleBreach())) {
 		t.Fatal("dispatch reported failure with all sinks succeeding")
@@ -128,7 +156,7 @@ func TestDispatchReportsSuccessWhenAllSinksSucceed(t *testing.T) {
 func TestDispatchReportsFailureWhenAnySinkFails(t *testing.T) {
 	ok := &recordingSink{name: "ok"}
 	bad := &recordingSink{name: "bad", fail: true}
-	d := NewDispatcher([]Sink{ok, bad}, false, time.Second, discardLogger())
+	d := NewDispatcher([]Sink{ok, bad}, false, 0, time.Second, discardLogger())
 
 	if d.dispatch(context.Background(), FromBreach(sampleBreach())) {
 		t.Fatal("dispatch reported success despite a failing sink")

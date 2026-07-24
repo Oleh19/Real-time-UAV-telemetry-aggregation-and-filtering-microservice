@@ -79,7 +79,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	dispatcher := notify.NewDispatcher(sinks, cfg.NotifyOnExit, cfg.RequestTimeout, logger)
+	dispatcher := notify.NewDispatcher(sinks, cfg.NotifyOnExit, cfg.Cooldown, cfg.RequestTimeout, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,

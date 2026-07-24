@@ -222,6 +222,15 @@ func TestLoadNotifier(t *testing.T) {
 			env:     map[string]string{"NOTIFY_REQUEST_TIMEOUT": "10ms"},
 			wantErr: true,
 		},
+		{
+			name: "cooldown disabled",
+			env:  map[string]string{"NOTIFY_COOLDOWN": "0s"},
+		},
+		{
+			name:    "negative cooldown",
+			env:     map[string]string{"NOTIFY_COOLDOWN": "-5s"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -242,7 +251,7 @@ func TestLoadNotifier(t *testing.T) {
 
 func clearNotifierEnv(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"NATS_URL", "HTTP_ADDR", "NOTIFY_DURABLE", "NOTIFY_ON_EXIT", "NOTIFY_REQUEST_TIMEOUT", "WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_BASE_URL"} {
+	for _, key := range []string{"NATS_URL", "HTTP_ADDR", "NOTIFY_DURABLE", "NOTIFY_ON_EXIT", "NOTIFY_REQUEST_TIMEOUT", "NOTIFY_COOLDOWN", "WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_BASE_URL"} {
 		t.Setenv(key, "")
 	}
 }
