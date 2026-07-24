@@ -12,11 +12,11 @@ import (
 )
 
 type SwarmSnapshot struct {
-	ID         string
-	DroneIDs   []string
-	Latitude   float64
-	Longitude  float64
-	DetectedAt time.Time
+	ID         string    `json:"id"`
+	DroneIDs   []string  `json:"droneIds"`
+	Latitude   float64   `json:"latitude"`
+	Longitude  float64   `json:"longitude"`
+	DetectedAt time.Time `json:"detectedAt"`
 }
 
 func (r *Repository) PublishZonePresence(ctx context.Context, replica string, alarms map[telemetry.ZoneID]int) error {
