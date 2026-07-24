@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   afterNextRender,
   effect,
@@ -19,6 +20,7 @@ import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
 
 const MAP_CENTER: L.LatLngExpression = [48.7, 31.2];
 const MAP_ZOOM = 6;
+const CULL_MARGIN = 0.5;
 
 const calmZoneStyle: L.PathOptions = {
   color: '#8b98a9',
@@ -98,9 +100,16 @@ export class DroneMapComponent {
   private readonly bearings = new Map<string, number>();
   private readonly lastPositions = new Map<string, L.LatLng>();
   private readonly iconKeys = new Map<string, string>();
+  private latestDrones: DroneSample[] = [];
+  private droneFrame = 0;
 
   constructor() {
     afterNextRender(() => this.initMap());
+    inject(DestroyRef).onDestroy(() => {
+      if (this.droneFrame !== 0) {
+        cancelAnimationFrame(this.droneFrame);
+      }
+    });
     effect(() => {
       if (!this.mapReady()) {
         return;
@@ -117,7 +126,8 @@ export class DroneMapComponent {
       if (!this.mapReady()) {
         return;
       }
-      this.renderDrones(this.telemetry.drones());
+      this.latestDrones = this.telemetry.drones();
+      this.scheduleDroneRender();
     });
     effect(() => {
       if (!this.mapReady()) {
@@ -170,7 +180,18 @@ export class DroneMapComponent {
     this.map.on('click', (event: L.LeafletMouseEvent) => {
       this.customZones.addVertex({ latitude: event.latlng.lat, longitude: event.latlng.lng });
     });
+    this.map.on('moveend zoomend', () => this.scheduleDroneRender());
     this.mapReady.set(true);
+  }
+
+  private scheduleDroneRender(): void {
+    if (this.droneFrame !== 0) {
+      return;
+    }
+    this.droneFrame = requestAnimationFrame(() => {
+      this.droneFrame = 0;
+      this.renderDrones(this.latestDrones);
+    });
   }
 
   private renderZones(zones: ZoneFeatureCollection): void {
@@ -202,12 +223,17 @@ export class DroneMapComponent {
       return;
     }
     const predictions = this.prediction.byDroneId();
-    const seen = new Set<string>();
+    const viewport = this.map.getBounds().pad(CULL_MARGIN);
+    const live = new Set<string>();
     for (const drone of drones) {
-      seen.add(drone.DroneID);
+      live.add(drone.DroneID);
       const position = L.latLng(drone.Latitude, drone.Longitude);
-      const color = confidenceColor(drone.Confidence);
       const bearing = this.updateBearing(drone.DroneID, position);
+      if (!viewport.contains(position)) {
+        this.hideMarker(drone.DroneID);
+        continue;
+      }
+      const color = confidenceColor(drone.Confidence);
       const iconKey = `${color}:${Math.round(bearing)}`;
       const tooltip = tooltipFor(drone, predictions.get(drone.DroneID));
       const existing = this.markers.get(drone.DroneID);
@@ -230,13 +256,30 @@ export class DroneMapComponent {
       this.markers.set(drone.DroneID, marker);
       this.iconKeys.set(drone.DroneID, iconKey);
     }
+    this.forgetVanished(live);
+  }
+
+  private hideMarker(droneId: string): void {
+    const marker = this.markers.get(droneId);
+    if (marker) {
+      marker.remove();
+      this.markers.delete(droneId);
+      this.iconKeys.delete(droneId);
+    }
+  }
+
+  private forgetVanished(live: Set<string>): void {
     for (const [id, marker] of this.markers) {
-      if (!seen.has(id)) {
+      if (!live.has(id)) {
         marker.remove();
         this.markers.delete(id);
+        this.iconKeys.delete(id);
+      }
+    }
+    for (const id of this.bearings.keys()) {
+      if (!live.has(id)) {
         this.bearings.delete(id);
         this.lastPositions.delete(id);
-        this.iconKeys.delete(id);
       }
     }
   }
