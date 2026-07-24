@@ -15,8 +15,25 @@
   --radius: 8px;
 }
 
+:root[data-theme='light'] {
+  --color-bg: #eef1f5;
+  --color-surface: #ffffff;
+  --color-border: #d0d7e2;
+  --color-text: #16202c;
+  --color-text-muted: #56637a;
+  --color-accent: #1c6dd0;
+  --color-ok: #218838;
+  --color-warn: #b5670a;
+  --color-danger: #c22f2f;
+}
+
 * {
   box-sizing: border-box;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 html,

@@ -1,6 +1,16 @@
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="app-header">
   <h1>UAV Telemetry Monitor</h1>
+  <button
+    type="button"
+    class="theme-toggle"
+    [attr.aria-pressed]="theme.isDark()"
+    [attr.aria-label]="theme.isDark() ? 'Switch to light theme' : 'Switch to dark theme'"
+    (click)="theme.toggle()"
+  >
+    {{ theme.isDark() ? '☀ Light' : '☾ Dark' }}
+  </button>
 </header>
-<main class="app-main">
+<main id="main-content" class="app-main">
   <router-outlet />
 </main>

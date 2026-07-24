@@ -5,6 +5,9 @@
 }
 
 .app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -15,6 +18,42 @@
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.theme-toggle {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--color-text);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -48px;
+  z-index: 1000;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
 }
 
 .app-main {
