@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
 
@@ -37,9 +38,9 @@ func NewHistoryWriter(repo HistoryRepository, logger *slog.Logger) *HistoryWrite
 	return &HistoryWriter{repo: repo, logger: logger}
 }
 
-func (h *HistoryWriter) Run(ctx context.Context, consumer jetstream.Consumer, batchSize int, flushInterval time.Duration) error {
+func (h *HistoryWriter) Run(ctx context.Context, consumers []jetstream.Consumer, batchSize int, flushInterval time.Duration) error {
 	messages := make(chan jetstream.Msg, batchSize)
-	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
 		select {
 		case <-ctx.Done():
 		case messages <- msg:
@@ -48,7 +49,7 @@ func (h *HistoryWriter) Run(ctx context.Context, consumer jetstream.Consumer, ba
 	if err != nil {
 		return fmt.Errorf("consume telemetry for history: %w", err)
 	}
-	defer consumeCtx.Stop()
+	defer stop()
 
 	h.logger.Info("history writer started",
 		"batch_size", batchSize,

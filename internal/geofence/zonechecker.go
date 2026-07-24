@@ -63,9 +63,9 @@ func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logge
 	}
 }
 
-func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, workerCount, queueSize int) error {
+func (z *ZoneChecker) Run(ctx context.Context, consumers []jetstream.Consumer, workerCount, queueSize int) error {
 	messages := make(chan jetstream.Msg, queueSize)
-	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
 		select {
 		case <-ctx.Done():
 		case messages <- msg:
@@ -74,7 +74,7 @@ func (z *ZoneChecker) Run(ctx context.Context, consumer jetstream.Consumer, work
 	if err != nil {
 		return fmt.Errorf("consume telemetry for zone checks: %w", err)
 	}
-	defer consumeCtx.Stop()
+	defer stop()
 
 	z.logger.Info("zone checker started", "worker_count", workerCount)
 

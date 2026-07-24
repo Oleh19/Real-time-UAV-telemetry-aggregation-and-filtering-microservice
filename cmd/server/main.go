@@ -36,17 +36,24 @@ import (
 
 const maxIngestMessageBytes = 64 * 1024
 
-func newLiveConsumer(ctx context.Context, conn *nats.Conn) (jetstream.Consumer, error) {
-	js, err := natspub.NewJetStream(ctx, conn)
+func newLiveConsumers(ctx context.Context, conn *nats.Conn, partitionCount int) ([]jetstream.Consumer, error) {
+	js, err := natspub.NewJetStream(ctx, conn, partitionCount)
 	if err != nil {
 		return nil, err
 	}
-	return js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
-		FilterSubjects:    []string{natspub.SubjectTelemetry + ".*"},
-		DeliverPolicy:     jetstream.DeliverNewPolicy,
-		AckPolicy:         jetstream.AckNonePolicy,
-		InactiveThreshold: time.Minute,
-	})
+	consumers := make([]jetstream.Consumer, 0, partitionCount)
+	for p := range partitionCount {
+		consumer, err := js.CreateOrUpdateConsumer(ctx, natspub.TelemetryStreamName(p), jetstream.ConsumerConfig{
+			DeliverPolicy:     jetstream.DeliverNewPolicy,
+			AckPolicy:         jetstream.AckNonePolicy,
+			InactiveThreshold: time.Minute,
+		})
+		if err != nil {
+			return nil, err
+		}
+		consumers = append(consumers, consumer)
+	}
+	return consumers, nil
 }
 
 func main() {
@@ -110,12 +117,12 @@ func run(logger *slog.Logger) error {
 	var liveTargets *livetargets.Store
 	if cfg.ServeLiveAPI {
 		liveTargets = livetargets.NewStore(cfg.StateTTL)
-		liveConsumer, err := newLiveConsumer(ctx, natsConn)
+		liveConsumers, err := newLiveConsumers(ctx, natsConn, cfg.PartitionCount)
 		if err != nil {
 			return err
 		}
 		go func() {
-			if err := livetargets.Run(workerCtx, liveConsumer, liveTargets, logger); err != nil {
+			if err := livetargets.Run(workerCtx, liveConsumers, liveTargets, logger); err != nil {
 				logger.Error("live target aggregator stopped", "error", err)
 			}
 		}()

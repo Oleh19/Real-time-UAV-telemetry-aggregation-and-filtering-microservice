@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/partition"
 	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
@@ -65,14 +66,14 @@ func TestAsyncPublishAndConsumeRoundtrip(t *testing.T) {
 		t.Fatalf("Flush: %v", err)
 	}
 
-	js, err := natspub.NewJetStream(ctx, conn)
+	js, err := natspub.NewJetStream(ctx, conn, 4)
 	if err != nil {
 		t.Fatalf("NewJetStream: %v", err)
 	}
-	consumer, err := js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
-		Durable:       "itest-telemetry-reader",
-		FilterSubject: natspub.SubjectTelemetry + ".*",
-		AckPolicy:     jetstream.AckExplicitPolicy,
+	p := partition.Of(sample.Latitude, sample.Longitude, 4)
+	consumer, err := js.CreateOrUpdateConsumer(ctx, natspub.TelemetryStreamName(p), jetstream.ConsumerConfig{
+		Durable:   "itest-telemetry-reader",
+		AckPolicy: jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
 		t.Fatalf("CreateOrUpdateConsumer: %v", err)

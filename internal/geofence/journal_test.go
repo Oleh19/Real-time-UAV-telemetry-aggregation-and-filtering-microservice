@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -61,7 +62,7 @@ func runJournal(t *testing.T, repo *fakeBreachRepo) *fakeConsumer {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := geofence.NewBreachJournal(repo, discardLogger()).Run(ctx, consumer); err != nil {
+		if err := geofence.NewBreachJournal(repo, discardLogger()).Run(ctx, []jetstream.Consumer{consumer}); err != nil {
 			t.Errorf("journal run: %v", err)
 		}
 	}()

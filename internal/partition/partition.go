@@ -42,3 +42,23 @@ func AssignedSubjects(base string, partitionCount, shardIndex, shardCount int) [
 	}
 	return subjects
 }
+
+func AssignedPartitions(partitionCount, shardIndex, shardCount int) []int {
+	if partitionCount < 1 {
+		partitionCount = 1
+	}
+	if shardCount <= 1 {
+		partitions := make([]int, partitionCount)
+		for p := range partitionCount {
+			partitions[p] = p
+		}
+		return partitions
+	}
+	partitions := make([]int, 0, partitionCount/shardCount+1)
+	for p := range partitionCount {
+		if p%shardCount == shardIndex {
+			partitions = append(partitions, p)
+		}
+	}
+	return partitions
+}

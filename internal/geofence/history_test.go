@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
 	"uavmonitor/internal/geofence"
 )
 
@@ -18,7 +20,7 @@ func startHistoryWriter(t *testing.T, repo *fakeHistoryRepo, batchSize int, flus
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := geofence.NewHistoryWriter(repo, discardLogger()).Run(ctx, consumer, batchSize, flushInterval); err != nil {
+		if err := geofence.NewHistoryWriter(repo, discardLogger()).Run(ctx, []jetstream.Consumer{consumer}, batchSize, flushInterval); err != nil {
 			t.Errorf("Run: %v", err)
 		}
 	}()

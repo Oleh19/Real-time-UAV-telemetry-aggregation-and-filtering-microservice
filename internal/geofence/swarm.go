@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
 
@@ -80,8 +81,8 @@ func NewSwarmDetector(cfg SwarmConfig, logger *slog.Logger) *SwarmDetector {
 	}
 }
 
-func (d *SwarmDetector) Run(ctx context.Context, consumer jetstream.Consumer) error {
-	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+func (d *SwarmDetector) Run(ctx context.Context, consumers []jetstream.Consumer) error {
+	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
 		if sample, ok := decodeSample(msg.Data(), d.logger); ok {
 			d.Observe(sample)
 		}
@@ -92,7 +93,7 @@ func (d *SwarmDetector) Run(ctx context.Context, consumer jetstream.Consumer) er
 	if err != nil {
 		return fmt.Errorf("consume telemetry for swarm detection: %w", err)
 	}
-	defer consumeCtx.Stop()
+	defer stop()
 
 	d.logger.Info("swarm detector started",
 		"radius_m", d.cfg.RadiusMeters,

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"uavmonitor/gen/telemetryv1"
+	"uavmonitor/internal/queue/natspub"
 	"uavmonitor/internal/telemetry"
 )
 
@@ -93,8 +94,8 @@ func (s *Store) EvictLoop(ctx context.Context) {
 	}
 }
 
-func Run(ctx context.Context, consumer jetstream.Consumer, store *Store, logger *slog.Logger) error {
-	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+func Run(ctx context.Context, consumers []jetstream.Consumer, store *Store, logger *slog.Logger) error {
+	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
 		if sample, ok := decode(msg.Data()); ok {
 			store.Observe(sample)
 		}
@@ -102,7 +103,7 @@ func Run(ctx context.Context, consumer jetstream.Consumer, store *Store, logger 
 	if err != nil {
 		return fmt.Errorf("consume fused telemetry for live targets: %w", err)
 	}
-	defer consumeCtx.Stop()
+	defer stop()
 	logger.Info("live target aggregator started")
 	<-ctx.Done()
 	return nil

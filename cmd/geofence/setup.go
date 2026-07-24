@@ -30,10 +30,10 @@ type dependencies struct {
 	breachJournal   *geofence.BreachJournal
 	swarmDetector   *geofence.SwarmDetector
 	replayManager   *replay.Manager
-	historyConsumer jetstream.Consumer
-	zonesConsumer   jetstream.Consumer
-	breachConsumer  jetstream.Consumer
-	swarmConsumer   jetstream.Consumer
+	historyConsumer []jetstream.Consumer
+	zonesConsumer   []jetstream.Consumer
+	breachConsumer  []jetstream.Consumer
+	swarmConsumer   []jetstream.Consumer
 }
 
 func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logger) (*dependencies, func(), error) {
@@ -68,32 +68,31 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		pool.Close()
 	}
 
-	js, err := natspub.NewJetStream(ctx, natsConn)
+	js, err := natspub.NewJetStream(ctx, natsConn, cfg.PartitionCount)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 
-	telemetrySubjects := partition.AssignedSubjects(natspub.SubjectTelemetry, cfg.PartitionCount, cfg.ShardIndex, cfg.ShardCount)
-	shardSuffix := fmt.Sprintf("-s%d", cfg.ShardIndex)
-	logger.Info("shard telemetry subjects", "replica", cfg.ReplicaID, "subjects", telemetrySubjects)
+	ownedPartitions := partition.AssignedPartitions(cfg.PartitionCount, cfg.ShardIndex, cfg.ShardCount)
+	logger.Info("shard telemetry partitions", "replica", cfg.ReplicaID, "partitions", ownedPartitions)
 
-	historyConsumer, err := newConsumer(ctx, js, "geofence-history"+shardSuffix, telemetrySubjects)
+	historyConsumer, err := newTelemetryConsumers(ctx, js, "geofence-history", ownedPartitions)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	zonesConsumer, err := newConsumer(ctx, js, "geofence-zones"+shardSuffix, telemetrySubjects)
+	zonesConsumer, err := newTelemetryConsumers(ctx, js, "geofence-zones", ownedPartitions)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	breachConsumer, err := newConsumer(ctx, js, "geofence-breach-journal", []string{natspub.SubjectAlerts})
+	breachConsumer, err := newConsumer(ctx, js, natspub.AlertsStreamName, "geofence-breach-journal", "")
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	swarmConsumer, err := newConsumer(ctx, js, "geofence-swarms"+shardSuffix, telemetrySubjects)
+	swarmConsumer, err := newTelemetryConsumers(ctx, js, "geofence-swarms", ownedPartitions)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -158,19 +157,34 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		replayManager:   replayManager,
 		historyConsumer: historyConsumer,
 		zonesConsumer:   zonesConsumer,
-		breachConsumer:  breachConsumer,
+		breachConsumer:  []jetstream.Consumer{breachConsumer},
 		swarmConsumer:   swarmConsumer,
 	}, cleanup, nil
 }
 
-func newConsumer(ctx context.Context, js jetstream.JetStream, durable string, subjects []string) (jetstream.Consumer, error) {
-	return js.CreateOrUpdateConsumer(ctx, natspub.StreamName, jetstream.ConsumerConfig{
-		Durable:        durable,
-		FilterSubjects: subjects,
-		AckPolicy:      jetstream.AckExplicitPolicy,
-		AckWait:        30 * time.Second,
-		MaxDeliver:     10,
-	})
+func newTelemetryConsumers(ctx context.Context, js jetstream.JetStream, role string, partitions []int) ([]jetstream.Consumer, error) {
+	consumers := make([]jetstream.Consumer, 0, len(partitions))
+	for _, p := range partitions {
+		consumer, err := newConsumer(ctx, js, natspub.TelemetryStreamName(p), fmt.Sprintf("%s-p%d", role, p), "")
+		if err != nil {
+			return nil, err
+		}
+		consumers = append(consumers, consumer)
+	}
+	return consumers, nil
+}
+
+func newConsumer(ctx context.Context, js jetstream.JetStream, stream, durable, filterSubject string) (jetstream.Consumer, error) {
+	cfg := jetstream.ConsumerConfig{
+		Durable:    durable,
+		AckPolicy:  jetstream.AckExplicitPolicy,
+		AckWait:    30 * time.Second,
+		MaxDeliver: 10,
+	}
+	if filterSubject != "" {
+		cfg.FilterSubject = filterSubject
+	}
+	return js.CreateOrUpdateConsumer(ctx, stream, cfg)
 }
 
 func waitForPostgres(ctx context.Context, pool *pgxpool.Pool) error {

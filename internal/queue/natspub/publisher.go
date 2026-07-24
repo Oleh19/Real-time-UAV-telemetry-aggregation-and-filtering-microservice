@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -22,11 +23,15 @@ import (
 )
 
 const (
-	StreamName       = "DRONE"
+	AlertsStreamName = "DRONE_ALERTS"
 	SubjectTelemetry = "drone.telemetry"
 	SubjectAlerts    = "drone.alerts"
 	streamMaxAge     = 24 * time.Hour
 )
+
+func TelemetryStreamName(p int) string {
+	return fmt.Sprintf("DRONE_TEL_%d", p)
+}
 
 var tracer = otel.Tracer("uavmonitor/natspub")
 
@@ -43,12 +48,12 @@ func newTracedMsg(ctx context.Context, subject string, payload []byte) (*nats.Ms
 	return msg, span
 }
 
-func NewJetStream(ctx context.Context, conn *nats.Conn) (jetstream.JetStream, error) {
+func NewJetStream(ctx context.Context, conn *nats.Conn, partitionCount int) (jetstream.JetStream, error) {
 	js, err := jetstream.New(conn)
 	if err != nil {
 		return nil, fmt.Errorf("create jetstream context: %w", err)
 	}
-	if err := ensureStream(ctx, js); err != nil {
+	if err := ensureStreams(ctx, js, partitionCount); err != nil {
 		return nil, err
 	}
 	return js, nil
@@ -61,15 +66,39 @@ func storageFromEnv() jetstream.StorageType {
 	return jetstream.FileStorage
 }
 
-func ensureStream(ctx context.Context, js jetstream.JetStream) error {
-	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:     StreamName,
-		Subjects: []string{"drone.>"},
-		Storage:  storageFromEnv(),
+func replicasFromEnv() int {
+	if v, err := strconv.Atoi(os.Getenv("STREAM_REPLICAS")); err == nil && v >= 1 {
+		return v
+	}
+	return 1
+}
+
+func ensureStreams(ctx context.Context, js jetstream.JetStream, partitionCount int) error {
+	if partitionCount < 1 {
+		partitionCount = 1
+	}
+	storage := storageFromEnv()
+	replicas := replicasFromEnv()
+	for p := range partitionCount {
+		name := TelemetryStreamName(p)
+		if _, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+			Name:     name,
+			Subjects: []string{partition.Subject(SubjectTelemetry, p)},
+			Storage:  storage,
+			Replicas: replicas,
+			MaxAge:   streamMaxAge,
+		}); err != nil {
+			return fmt.Errorf("ensure stream %s: %w", name, err)
+		}
+	}
+	if _, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:     AlertsStreamName,
+		Subjects: []string{SubjectAlerts},
+		Storage:  storage,
+		Replicas: replicas,
 		MaxAge:   streamMaxAge,
-	})
-	if err != nil {
-		return fmt.Errorf("ensure stream %s: %w", StreamName, err)
+	}); err != nil {
+		return fmt.Errorf("ensure stream %s: %w", AlertsStreamName, err)
 	}
 	return nil
 }
@@ -96,7 +125,7 @@ func NewAsyncPublisher(ctx context.Context, conn *nats.Conn, logger *slog.Logger
 	if err != nil {
 		return nil, fmt.Errorf("create jetstream context: %w", err)
 	}
-	if err := ensureStream(ctx, js); err != nil {
+	if err := ensureStreams(ctx, js, partitionCount); err != nil {
 		return nil, err
 	}
 	publisher.js = js

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
 	"uavmonitor/internal/geofence"
 	"uavmonitor/internal/telemetry"
 )
@@ -130,7 +132,7 @@ func TestZoneCheckerRunAcksMessages(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := checker.Run(ctx, consumer, 2, 4); err != nil {
+		if err := checker.Run(ctx, []jetstream.Consumer{consumer}, 2, 4); err != nil {
 			t.Errorf("Run: %v", err)
 		}
 	}()

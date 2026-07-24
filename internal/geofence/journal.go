@@ -33,14 +33,14 @@ func NewBreachJournal(repo BreachRepository, logger *slog.Logger) *BreachJournal
 	return &BreachJournal{repo: repo, logger: logger}
 }
 
-func (j *BreachJournal) Run(ctx context.Context, consumer jetstream.Consumer) error {
-	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+func (j *BreachJournal) Run(ctx context.Context, consumers []jetstream.Consumer) error {
+	stop, err := natspub.ConsumeAll(consumers, func(msg jetstream.Msg) {
 		j.record(ctx, msg)
 	})
 	if err != nil {
 		return fmt.Errorf("consume breach alerts for journal: %w", err)
 	}
-	defer consumeCtx.Stop()
+	defer stop()
 
 	j.logger.Info("breach journal started")
 	<-ctx.Done()
