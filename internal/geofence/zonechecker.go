@@ -31,6 +31,7 @@ type FriendlyLookup interface {
 const (
 	staleDroneStateAfter = time.Minute
 	pruneStateEvery      = 10 * time.Second
+	alarmActiveWindow    = 6 * time.Second
 )
 
 type droneZoneState struct {
@@ -44,6 +45,7 @@ type ZoneChecker struct {
 	alerts        AlertPublisher
 	friendly      FriendlyLookup
 	logger        *slog.Logger
+	now           func() time.Time
 	mu            sync.Mutex
 	state         map[telemetry.DroneID]*droneZoneState
 	lastPrune     time.Time
@@ -69,6 +71,7 @@ func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logge
 		zones:  zones,
 		alerts: alerts,
 		logger: logger,
+		now:    time.Now,
 		state:  make(map[telemetry.DroneID]*droneZoneState),
 	}
 }
@@ -160,9 +163,13 @@ func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 func (z *ZoneChecker) ActiveAlarms() map[telemetry.ZoneID]int {
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	z.pruneLocked(time.Now())
+	now := z.now()
+	z.pruneLocked(now)
 	alarms := make(map[telemetry.ZoneID]int)
 	for _, st := range z.state {
+		if now.Sub(st.lastSeen) > alarmActiveWindow {
+			continue
+		}
 		for id := range st.zones {
 			alarms[id]++
 		}
@@ -174,7 +181,7 @@ func (z *ZoneChecker) diffZones(sample telemetry.Sample, current []telemetry.Zon
 	z.mu.Lock()
 	defer z.mu.Unlock()
 
-	now := time.Now()
+	now := z.now()
 	z.pruneLocked(now)
 
 	st, known := z.state[sample.DroneID]
