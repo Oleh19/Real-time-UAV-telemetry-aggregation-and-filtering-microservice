@@ -170,6 +170,27 @@ func payloadAt(id string, ts time.Time) []byte {
 	return payload
 }
 
+func payloadWithSquawk(id string, ts time.Time, squawk string) []byte {
+	payload, err := proto.Marshal(&telemetryv1.DroneTelemetry{
+		DroneId:   id,
+		Timestamp: timestamppb.New(ts),
+		Latitude:  50.45,
+		Longitude: 30.52,
+		Squawk:    squawk,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return payload
+}
+
+type staticFriendly map[string]struct{}
+
+func (s staticFriendly) IsFriendly(squawk string) bool {
+	_, ok := s[squawk]
+	return ok
+}
+
 func eventually(condition func() bool) bool {
 	limit := time.Now().Add(2 * time.Second)
 	for time.Now().Before(limit) {

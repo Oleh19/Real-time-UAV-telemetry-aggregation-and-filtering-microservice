@@ -19,7 +19,14 @@
       <tbody>
         @for (row of rows(); track row.DroneID) {
           <tr>
-            <td>{{ row.DroneID }}</td>
+            <td>
+              {{ row.DroneID }}
+              @if (row.Friendly) {
+                <span class="friendly-badge" title="Registered friendly squawk {{ row.Squawk }}"
+                  >IFF</span
+                >
+              }
+            </td>
             <td>
               <span
                 class="target-class"

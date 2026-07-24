@@ -281,6 +281,9 @@ func (s *fuserShard) fusedSampleLocked(track *fusedTrack, timestamp time.Time, n
 		if obs.sample.Confidence > fused.Confidence {
 			fused.Confidence = obs.sample.Confidence
 		}
+		if fused.Squawk == "" && obs.sample.Squawk != "" {
+			fused.Squawk = obs.sample.Squawk
+		}
 		fresh++
 	}
 	if fresh > 0 {

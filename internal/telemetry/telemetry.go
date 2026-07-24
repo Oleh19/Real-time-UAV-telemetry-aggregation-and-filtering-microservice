@@ -47,6 +47,8 @@ type Sample struct {
 	Confidence int32
 	Quality    int32
 	Anomaly    bool
+	Squawk     string
+	Friendly   bool
 }
 
 func QualityFromUncertainty(uncertaintyMeters float64) int32 {

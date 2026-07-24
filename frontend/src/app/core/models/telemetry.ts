@@ -11,6 +11,13 @@ export interface DroneSample {
   Confidence: number;
   Quality: number;
   Anomaly: boolean;
+  Squawk: string;
+  Friendly: boolean;
+}
+
+export interface FriendlySquawk {
+  code: string;
+  label: string;
 }
 
 export interface IngestStats {

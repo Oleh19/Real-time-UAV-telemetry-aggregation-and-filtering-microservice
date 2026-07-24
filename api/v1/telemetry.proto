@@ -18,6 +18,8 @@ message DroneTelemetry {
   string classification = 9;
   int32 quality = 10;
   bool anomaly = 11;
+  string squawk = 12;
+  bool friendly = 13;
 }
 
 enum BreachEvent {

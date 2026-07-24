@@ -18,6 +18,8 @@ func newMetricsHandler(deps *dependencies) http.Handler {
 		deps.checker.EnteredTotal)
 	registerCounter(registry, "uav_zone_exits_total", "Drones that left an alert zone.",
 		deps.checker.ExitedTotal)
+	registerCounter(registry, "uav_friendly_suppressed_total", "Telemetry samples skipped because their squawk is a friendly identifier.",
+		deps.checker.FriendlyTotal)
 	registerCounter(registry, "uav_breaches_recorded_total", "Zone breach events persisted to the journal.",
 		deps.breachJournal.RecordedTotal)
 	registerCounter(registry, "uav_history_samples_written_total", "Telemetry samples written to flight history.",

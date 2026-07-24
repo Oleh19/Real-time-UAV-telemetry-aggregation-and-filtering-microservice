@@ -19,7 +19,10 @@ const (
 	spawnMinOffset      = 0.15
 	spawnMaxOffset      = 0.7
 	meanLifetime        = 4 * time.Minute
+	friendlyFraction    = 0.05
 )
+
+var friendlySquawks = []string{"UAF-01", "UAF-02", "MED-01"}
 
 type flightProfile struct {
 	name           string
@@ -46,12 +49,20 @@ type Drone struct {
 	altitude          float64
 	speed             float32
 	confidence        int32
+	squawk            string
 	rng               *rand.Rand
 }
 
 func NewDrone(index int, rng *rand.Rand) *Drone {
-	latitude, longitude := spawnOutsideUkraine(rng)
 	profile := flightProfiles[rng.IntN(len(flightProfiles))]
+	squawk := ""
+	var latitude, longitude float64
+	if rng.Float64() < friendlyFraction {
+		squawk = friendlySquawks[rng.IntN(len(friendlySquawks))]
+		latitude, longitude = spawnInsideUkraine(rng)
+	} else {
+		latitude, longitude = spawnOutsideUkraine(rng)
+	}
 	drone := &Drone{
 		id:         fmt.Sprintf("drone-%03d", index),
 		profile:    profile,
@@ -59,6 +70,7 @@ func NewDrone(index int, rng *rand.Rand) *Drone {
 		longitude:  longitude,
 		altitude:   profile.minAltitude + rng.Float64()*(profile.maxAltitude-profile.minAltitude),
 		confidence: 60 + rng.Int32N(41),
+		squawk:     squawk,
 		rng:        rng,
 	}
 	drone.pickWaypoint()
@@ -83,6 +95,12 @@ func spawnOutsideUkraine(rng *rand.Rand) (latitude, longitude float64) {
 	default:
 		return alongLatitude, ukraineMaxLongitude + offset
 	}
+}
+
+func spawnInsideUkraine(rng *rand.Rand) (latitude, longitude float64) {
+	latitude = ukraineMinLatitude + rng.Float64()*(ukraineMaxLatitude-ukraineMinLatitude)
+	longitude = ukraineMinLongitude + rng.Float64()*(ukraineMaxLongitude-ukraineMinLongitude)
+	return latitude, longitude
 }
 
 func (d *Drone) pickWaypoint() {
@@ -141,6 +159,7 @@ func (d *Drone) advance(interval time.Duration) *telemetryv1.DroneTelemetry {
 		Altitude:   d.altitude,
 		Speed:      d.speed,
 		Confidence: d.confidence,
+		Squawk:     d.squawk,
 	}
 }
 

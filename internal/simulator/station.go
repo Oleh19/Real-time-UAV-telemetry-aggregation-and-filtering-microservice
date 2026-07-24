@@ -48,5 +48,6 @@ func (s *Station) Observe(truth *telemetryv1.DroneTelemetry) *telemetryv1.DroneT
 		Altitude:   truth.GetAltitude() + s.rng.NormFloat64()*s.noise*altitudeNoiseScale,
 		Speed:      truth.GetSpeed(),
 		Confidence: confidence,
+		Squawk:     truth.GetSquawk(),
 	}
 }

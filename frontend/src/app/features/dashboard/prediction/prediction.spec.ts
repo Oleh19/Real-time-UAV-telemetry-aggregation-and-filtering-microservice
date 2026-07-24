@@ -14,6 +14,8 @@ function sample(overrides: Partial<DroneSample> = {}): DroneSample {
     Confidence: 90,
     Quality: 80,
     Anomaly: false,
+    Squawk: '',
+    Friendly: false,
     ...overrides,
   };
 }

@@ -24,6 +24,10 @@ type AlertPublisher interface {
 	PublishAlert(ctx context.Context, breach telemetry.ZoneBreach) error
 }
 
+type FriendlyLookup interface {
+	IsFriendly(squawk string) bool
+}
+
 const (
 	staleDroneStateAfter = time.Minute
 	pruneStateEvery      = 10 * time.Second
@@ -36,14 +40,16 @@ type droneZoneState struct {
 }
 
 type ZoneChecker struct {
-	zones        ZoneLocator
-	alerts       AlertPublisher
-	logger       *slog.Logger
-	mu           sync.Mutex
-	state        map[telemetry.DroneID]*droneZoneState
-	lastPrune    time.Time
-	enteredTotal atomic.Int64
-	exitedTotal  atomic.Int64
+	zones         ZoneLocator
+	alerts        AlertPublisher
+	friendly      FriendlyLookup
+	logger        *slog.Logger
+	mu            sync.Mutex
+	state         map[telemetry.DroneID]*droneZoneState
+	lastPrune     time.Time
+	enteredTotal  atomic.Int64
+	exitedTotal   atomic.Int64
+	friendlyTotal atomic.Int64
 }
 
 func (z *ZoneChecker) EnteredTotal() int64 {
@@ -54,6 +60,10 @@ func (z *ZoneChecker) ExitedTotal() int64 {
 	return z.exitedTotal.Load()
 }
 
+func (z *ZoneChecker) FriendlyTotal() int64 {
+	return z.friendlyTotal.Load()
+}
+
 func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logger) *ZoneChecker {
 	return &ZoneChecker{
 		zones:  zones,
@@ -61,6 +71,10 @@ func NewZoneChecker(zones ZoneLocator, alerts AlertPublisher, logger *slog.Logge
 		logger: logger,
 		state:  make(map[telemetry.DroneID]*droneZoneState),
 	}
+}
+
+func (z *ZoneChecker) SetFriendly(friendly FriendlyLookup) {
+	z.friendly = friendly
 }
 
 func (z *ZoneChecker) Run(ctx context.Context, consumers []jetstream.Consumer, workerCount, queueSize int) error {
@@ -104,6 +118,11 @@ func (z *ZoneChecker) Run(ctx context.Context, consumers []jetstream.Consumer, w
 func (z *ZoneChecker) Process(ctx context.Context, payload []byte) {
 	sample, ok := decodeSample(payload, z.logger)
 	if !ok {
+		return
+	}
+
+	if z.friendly != nil && z.friendly.IsFriendly(sample.Squawk) {
+		z.friendlyTotal.Add(1)
 		return
 	}
 
@@ -214,5 +233,6 @@ func decodeSample(payload []byte, logger *slog.Logger) (telemetry.Sample, bool) 
 		Altitude:   pb.GetAltitude(),
 		Speed:      pb.GetSpeed(),
 		Confidence: pb.GetConfidence(),
+		Squawk:     pb.GetSquawk(),
 	}, true
 }

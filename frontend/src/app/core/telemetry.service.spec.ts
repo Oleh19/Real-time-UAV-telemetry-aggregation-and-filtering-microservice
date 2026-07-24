@@ -49,6 +49,8 @@ const sample: DroneSample = {
   Confidence: 80,
   Quality: 85,
   Anomaly: false,
+  Squawk: '',
+  Friendly: false,
 };
 
 const stats: IngestStats = { Received: 10, Dropped: 1, Published: 9, Failed: 0, Rejected: 0 };

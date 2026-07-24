@@ -19,6 +19,8 @@ function drone(overrides: Partial<DroneSample> = {}): DroneSample {
     Confidence: 90,
     Quality: 100,
     Anomaly: false,
+    Squawk: '',
+    Friendly: false,
     ...overrides,
   };
 }
@@ -68,6 +70,16 @@ describe('ThreatService', () => {
     const far = service.threats().find((t) => t.droneId === 'far')!;
     expect(near.score).toBeGreaterThan(far.score);
     expect(near.zoneName).toBe('Kyiv Oblast');
+  });
+
+  it('excludes friendly targets from the ranking', () => {
+    const service = configure();
+    drones.set([
+      drone({ DroneID: 'hostile', Class: 'loitering-munition' }),
+      drone({ DroneID: 'patrol', Class: 'loitering-munition', Friendly: true }),
+    ]);
+    const ranked = service.threats();
+    expect(ranked.map((t) => t.droneId)).toEqual(['hostile']);
   });
 
   it('discounts low-quality tracks', () => {

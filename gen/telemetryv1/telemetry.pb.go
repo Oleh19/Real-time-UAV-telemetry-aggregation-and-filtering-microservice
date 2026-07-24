@@ -84,6 +84,8 @@ type DroneTelemetry struct {
 	Classification string                 `protobuf:"bytes,9,opt,name=classification,proto3" json:"classification,omitempty"`
 	Quality        int32                  `protobuf:"varint,10,opt,name=quality,proto3" json:"quality,omitempty"`
 	Anomaly        bool                   `protobuf:"varint,11,opt,name=anomaly,proto3" json:"anomaly,omitempty"`
+	Squawk         string                 `protobuf:"bytes,12,opt,name=squawk,proto3" json:"squawk,omitempty"`
+	Friendly       bool                   `protobuf:"varint,13,opt,name=friendly,proto3" json:"friendly,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -191,6 +193,20 @@ func (x *DroneTelemetry) GetQuality() int32 {
 func (x *DroneTelemetry) GetAnomaly() bool {
 	if x != nil {
 		return x.Anomaly
+	}
+	return false
+}
+
+func (x *DroneTelemetry) GetSquawk() string {
+	if x != nil {
+		return x.Squawk
+	}
+	return ""
+}
+
+func (x *DroneTelemetry) GetFriendly() bool {
+	if x != nil {
+		return x.Friendly
 	}
 	return false
 }
@@ -411,7 +427,7 @@ var File_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_v1_telemetry_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xec\x02\n" +
+	"\x12v1/telemetry.proto\x12\ftelemetry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa0\x03\n" +
 	"\x0eDroneTelemetry\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x1a\n" +
@@ -427,7 +443,9 @@ const file_v1_telemetry_proto_rawDesc = "" +
 	"\x0eclassification\x18\t \x01(\tR\x0eclassification\x12\x18\n" +
 	"\aquality\x18\n" +
 	" \x01(\x05R\aquality\x12\x18\n" +
-	"\aanomaly\x18\v \x01(\bR\aanomaly\"\x9e\x02\n" +
+	"\aanomaly\x18\v \x01(\bR\aanomaly\x12\x16\n" +
+	"\x06squawk\x18\f \x01(\tR\x06squawk\x12\x1a\n" +
+	"\bfriendly\x18\r \x01(\bR\bfriendly\"\x9e\x02\n" +
 	"\n" +
 	"ZoneBreach\x12\x19\n" +
 	"\bdrone_id\x18\x01 \x01(\tR\adroneId\x12\x17\n" +

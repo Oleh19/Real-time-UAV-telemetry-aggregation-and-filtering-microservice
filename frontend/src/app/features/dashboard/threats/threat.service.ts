@@ -32,6 +32,7 @@ export class ThreatService {
     const predictions = this.prediction.byDroneId();
     return this.telemetry
       .drones()
+      .filter((drone) => !drone.Friendly)
       .map((drone) => this.score(drone, predictions.get(drone.DroneID)?.eta ?? null))
       .sort((a, b) => b.score - a.score);
   });

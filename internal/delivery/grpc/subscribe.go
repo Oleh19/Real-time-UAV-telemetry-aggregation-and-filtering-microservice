@@ -84,5 +84,7 @@ func sampleToProto(sample telemetry.Sample) *telemetryv1.DroneTelemetry {
 		Confidence:     sample.Confidence,
 		Quality:        sample.Quality,
 		Anomaly:        sample.Anomaly,
+		Squawk:         sample.Squawk,
+		Friendly:       sample.Friendly,
 	}
 }

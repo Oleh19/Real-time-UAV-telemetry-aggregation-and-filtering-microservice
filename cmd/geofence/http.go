@@ -60,6 +60,9 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 			logger.Error("encode swarms", "error", err)
 		}
 	})
+	mux.HandleFunc("GET /friendly", listFriendlyHandler(deps.repo, logger))
+	mux.HandleFunc("POST /friendly", createFriendlyHandler(deps, logger))
+	mux.HandleFunc("DELETE /friendly/{code}", deleteFriendlyHandler(deps, logger))
 	mux.HandleFunc("GET /custom-zones", listCustomZonesHandler(deps, logger))
 	mux.HandleFunc("POST /custom-zones", createCustomZoneHandler(deps, logger))
 	mux.HandleFunc("DELETE /custom-zones/{id}", deleteCustomZoneHandler(deps, logger))

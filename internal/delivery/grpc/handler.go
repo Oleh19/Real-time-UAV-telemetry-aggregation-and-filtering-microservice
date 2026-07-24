@@ -67,6 +67,7 @@ func fromProto(msg *telemetryv1.DroneTelemetry) telemetry.Sample {
 	return telemetry.Sample{
 		DroneID:    telemetry.DroneID(msg.GetDroneId()),
 		StationID:  telemetry.StationID(msg.GetStationId()),
+		Squawk:     msg.GetSquawk(),
 		Timestamp:  msg.GetTimestamp().AsTime(),
 		Latitude:   msg.GetLatitude(),
 		Longitude:  msg.GetLongitude(),

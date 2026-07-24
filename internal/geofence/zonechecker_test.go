@@ -59,6 +59,28 @@ func TestZoneCheckerPublishesEnterAndExitEvents(t *testing.T) {
 	}
 }
 
+func TestZoneCheckerSuppressesFriendlySquawks(t *testing.T) {
+	locator := &fakeLocator{zones: []telemetry.Zone{{ID: 7, Name: "Kyiv Oblast"}}}
+	alerts := &fakeAlerts{}
+	checker := geofence.NewZoneChecker(locator, alerts, discardLogger())
+	checker.SetFriendly(staticFriendly{"UAF-01": {}})
+	ctx := context.Background()
+	base := time.Now()
+
+	checker.Process(ctx, payloadWithSquawk("drone-friendly", base, "UAF-01"))
+	if got := alerts.count(); got != 0 {
+		t.Fatalf("alerts for friendly squawk = %d, want 0", got)
+	}
+	if got := checker.FriendlyTotal(); got != 1 {
+		t.Fatalf("FriendlyTotal = %d, want 1", got)
+	}
+
+	checker.Process(ctx, payloadWithSquawk("drone-hostile", base, "HOSTILE-9"))
+	if got := alerts.count(); got != 1 {
+		t.Fatalf("alerts for hostile squawk = %d, want 1", got)
+	}
+}
+
 func TestZoneCheckerActiveAlarms(t *testing.T) {
 	locator := &fakeLocator{}
 	alerts := &fakeAlerts{}

@@ -5,6 +5,7 @@ import { catchError, of, retry } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { EVENT_SOURCE_FACTORY } from './event-source';
+import { FriendlyRegistryService } from './friendly-registry.service';
 import {
   DroneSample,
   EMPTY_ZONES,
@@ -22,13 +23,20 @@ interface TelemetryStreamEvent {
 export class TelemetryService {
   private readonly http = inject(HttpClient);
   private readonly createEventSource = inject(EVENT_SOURCE_FACTORY);
+  private readonly friendlyRegistry = inject(FriendlyRegistryService);
 
   private readonly dronesState = signal<DroneSample[]>([]);
   private readonly statsState = signal<IngestStats | null>(null);
   private readonly alertsState = signal<OblastAlert[]>([]);
   private readonly connectedState = signal(false);
 
-  readonly drones = this.dronesState.asReadonly();
+  readonly drones = computed(() => {
+    const codes = this.friendlyRegistry.codes();
+    return this.dronesState().map((drone) => ({
+      ...drone,
+      Friendly: drone.Friendly || codes.has(drone.Squawk),
+    }));
+  });
   readonly stats = this.statsState.asReadonly();
   readonly alerts = this.alertsState.asReadonly();
   readonly connected = this.connectedState.asReadonly();
