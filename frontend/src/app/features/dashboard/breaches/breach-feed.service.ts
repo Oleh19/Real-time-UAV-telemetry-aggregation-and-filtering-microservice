@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { DestroyRef, Injectable, inject } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, filter, of, switchMap, timer } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
@@ -12,6 +12,7 @@ const feedLimit = 50;
 @Injectable({ providedIn: 'root' })
 export class BreachFeedService {
   private readonly http = inject(HttpClient);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly breaches = toSignal(
     timer(0, pollIntervalMs).pipe(
@@ -26,4 +27,22 @@ export class BreachFeedService {
     ),
     { initialValue: [] as BreachRecord[] },
   );
+
+  acknowledge(id: number): void {
+    this.updateStatus(id, 'ack');
+  }
+
+  resolve(id: number): void {
+    this.updateStatus(id, 'resolve');
+  }
+
+  private updateStatus(id: number, action: 'ack' | 'resolve'): void {
+    this.http
+      .post(`${environment.apiBaseUrl}/breaches/${id}/${action}`, null)
+      .pipe(
+        catchError(() => of(null)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
+  }
 }

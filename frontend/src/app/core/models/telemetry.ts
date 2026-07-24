@@ -30,11 +30,15 @@ export interface OblastAlert {
 
 export type BreachEvent = 'entered' | 'exited';
 
+export type BreachStatus = 'open' | 'acknowledged' | 'resolved';
+
 export interface BreachRecord {
+  ID: number;
   DroneID: string;
   ZoneID: number;
   ZoneName: string;
   Event: BreachEvent;
+  Status: BreachStatus;
   OccurredAt: string;
   Latitude: number;
   Longitude: number;

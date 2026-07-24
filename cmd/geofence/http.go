@@ -46,6 +46,8 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /zones", zonesHandler(deps.repo, logger))
 	mux.HandleFunc("GET /history", historyHandler(deps.repo, logger))
 	mux.HandleFunc("GET /breaches", breachesHandler(deps.repo, logger))
+	mux.HandleFunc("POST /breaches/{id}/ack", breachStatusHandler(deps.repo, postgres.BreachStatusAcknowledged, logger))
+	mux.HandleFunc("POST /breaches/{id}/resolve", breachStatusHandler(deps.repo, postgres.BreachStatusResolved, logger))
 	mux.HandleFunc("GET /swarms", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		swarms, err := deps.repo.ActiveSwarms(r.Context(), shardStateFresh)

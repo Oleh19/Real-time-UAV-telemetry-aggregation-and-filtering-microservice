@@ -52,3 +52,41 @@
   white-space: nowrap;
   color: var(--color-text);
 }
+
+.event {
+  align-items: center;
+}
+
+.event[data-status='resolved'] {
+  opacity: 0.5;
+}
+
+.event[data-status='acknowledged'] {
+  border-color: var(--color-warn);
+}
+
+.event-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.event-actions button {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  padding: 0 var(--space-1);
+  cursor: pointer;
+}
+
+.event-actions button:hover {
+  color: var(--color-text);
+}
+
+.event-resolved {
+  color: var(--color-ok);
+  font-size: 0.65rem;
+}

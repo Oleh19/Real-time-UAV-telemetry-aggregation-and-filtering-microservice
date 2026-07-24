@@ -5,6 +5,7 @@ package postgres_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -311,6 +312,28 @@ func TestZoneBreachJournalRoundTrip(t *testing.T) {
 	}
 	if mine[1].ZoneName != "Kyiv Oblast" || mine[1].Latitude != 50.45 {
 		t.Errorf("record = zone %q lat %f, want Kyiv Oblast 50.45", mine[1].ZoneName, mine[1].Latitude)
+	}
+	if mine[0].Status != postgres.BreachStatusOpen {
+		t.Errorf("new breach status = %q, want open", mine[0].Status)
+	}
+
+	if err := repo.SetBreachStatus(ctx, mine[0].ID, postgres.BreachStatusAcknowledged); err != nil {
+		t.Fatalf("SetBreachStatus ack: %v", err)
+	}
+	if err := repo.SetBreachStatus(ctx, mine[0].ID, postgres.BreachStatusResolved); err != nil {
+		t.Fatalf("SetBreachStatus resolve: %v", err)
+	}
+	after, err := repo.ListZoneBreaches(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListZoneBreaches after status: %v", err)
+	}
+	for _, rec := range after {
+		if rec.ID == mine[0].ID && rec.Status != postgres.BreachStatusResolved {
+			t.Errorf("breach %d status = %q, want resolved", rec.ID, rec.Status)
+		}
+	}
+	if err := repo.SetBreachStatus(ctx, 1<<62, postgres.BreachStatusResolved); !errors.Is(err, postgres.ErrBreachNotFound) {
+		t.Errorf("SetBreachStatus on missing id = %v, want ErrBreachNotFound", err)
 	}
 }
 

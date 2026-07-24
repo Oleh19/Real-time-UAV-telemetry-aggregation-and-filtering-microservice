@@ -4,8 +4,8 @@
   </header>
   @if (feed.breaches().length > 0) {
     <ul class="events">
-      @for (breach of feed.breaches(); track breach.DroneID + breach.Event + breach.OccurredAt) {
-        <li class="event">
+      @for (breach of feed.breaches(); track breach.ID) {
+        <li class="event" [attr.data-status]="breach.Status">
           <span class="event-time">{{ breach.OccurredAt | date: 'HH:mm:ss' }}</span>
           <span
             class="event-badge"
@@ -15,6 +15,16 @@
             {{ breach.Event }}
           </span>
           <span class="event-text">{{ breach.DroneID }} · {{ breach.ZoneName }}</span>
+          <span class="event-actions">
+            @if (breach.Status === 'open') {
+              <button type="button" (click)="feed.acknowledge(breach.ID)">ack</button>
+            }
+            @if (breach.Status !== 'resolved') {
+              <button type="button" (click)="feed.resolve(breach.ID)">resolve</button>
+            } @else {
+              <span class="event-resolved">resolved</span>
+            }
+          </span>
         </li>
       }
     </ul>
