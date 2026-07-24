@@ -9,7 +9,12 @@
     <ul class="oblasts">
       @for (alert of telemetry.alerts(); track alert.id) {
         <li class="oblast" [class.oblast-alarmed]="alert.alarmed">
-          <span class="oblast-name">{{ alert.name }}</span>
+          <span class="oblast-name">
+            {{ alert.name }}
+            @if (alert.kind === 'custom') {
+              <span class="zone-tag">zone</span>
+            }
+          </span>
           @if (alert.alarmed) {
             <span class="oblast-drones">{{ alert.drones }}</span>
           }

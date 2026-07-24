@@ -27,6 +27,7 @@ type geoJSONFeatureCollection struct {
 type oblastAlert struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
+	Kind    string `json:"kind"`
 	Alarmed bool   `json:"alarmed"`
 	Drones  int    `json:"drones"`
 }
@@ -90,12 +91,24 @@ func alertsSnapshot(ctx context.Context, deps *dependencies, logger *slog.Logger
 		logger.Error("query active zone alarms", "error", err)
 		alarms = map[telemetry.ZoneID]int{}
 	}
-	alerts := make([]oblastAlert, 0, len(deps.oblasts))
+	customZones := deps.customZones.Zones()
+	alerts := make([]oblastAlert, 0, len(deps.oblasts)+len(customZones))
 	for _, oblast := range deps.oblasts {
 		drones := alarms[oblast.ID]
 		alerts = append(alerts, oblastAlert{
 			ID:      int64(oblast.ID),
 			Name:    oblast.Name,
+			Kind:    "oblast",
+			Alarmed: drones > 0,
+			Drones:  drones,
+		})
+	}
+	for _, zone := range customZones {
+		drones := alarms[zone.ID]
+		alerts = append(alerts, oblastAlert{
+			ID:      int64(zone.ID),
+			Name:    zone.Name,
+			Kind:    "custom",
 			Alarmed: drones > 0,
 			Drones:  drones,
 		})

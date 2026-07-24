@@ -40,7 +40,7 @@ export class TelemetryService {
   readonly stats = this.statsState.asReadonly();
   readonly alerts = this.alertsState.asReadonly();
   readonly connected = this.connectedState.asReadonly();
-  readonly alarmedOblastIds = computed(
+  readonly alarmedZoneIds = computed(
     () =>
       new Set(
         this.alerts()
@@ -48,6 +48,7 @@ export class TelemetryService {
           .map((alert) => alert.id),
       ),
   );
+  readonly alarmedOblastIds = this.alarmedZoneIds;
 
   readonly zones = toSignal(
     this.http.get<ZoneFeatureCollection>(`${environment.apiBaseUrl}/zones`).pipe(

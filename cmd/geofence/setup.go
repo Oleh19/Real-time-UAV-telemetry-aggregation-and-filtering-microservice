@@ -26,6 +26,7 @@ type dependencies struct {
 	checker         *geofence.ZoneChecker
 	zoneIndex       *geofence.RefreshingZoneIndex
 	friendlyCache   *geofence.FriendlyCache
+	customZones     *geofence.CustomZoneCache
 	oblasts         []telemetry.Zone
 	historyWriter   *geofence.HistoryWriter
 	breachJournal   *geofence.BreachJournal
@@ -135,6 +136,11 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		return nil, nil, err
 	}
 	checker.SetFriendly(friendlyCache)
+	customZones := geofence.NewCustomZoneCache()
+	if err := customZones.Refresh(ctx, repo); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	historyWriter := geofence.NewHistoryWriter(repo, logger)
 	replayPublisher, err := newGRPCTelemetryPublisher(cfg.IngestServerAddr, cfg.IngestToken)
 	if err != nil {
@@ -158,6 +164,7 @@ func newDependencies(ctx context.Context, cfg config.Geofence, logger *slog.Logg
 		checker:         checker,
 		zoneIndex:       zoneIndex,
 		friendlyCache:   friendlyCache,
+		customZones:     customZones,
 		oblasts:         oblasts,
 		historyWriter:   historyWriter,
 		breachJournal:   breachJournal,

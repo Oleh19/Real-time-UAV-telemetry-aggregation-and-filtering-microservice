@@ -35,9 +35,12 @@ export interface IngestStats {
   Rejected: number;
 }
 
+export type ZoneKind = 'oblast' | 'custom';
+
 export interface OblastAlert {
   id: number;
   name: string;
+  kind: ZoneKind;
   alarmed: boolean;
   drones: number;
 }

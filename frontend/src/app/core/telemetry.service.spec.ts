@@ -56,8 +56,8 @@ const sample: DroneSample = {
 const stats: IngestStats = { Received: 10, Dropped: 1, Published: 9, Failed: 0, Rejected: 0 };
 
 const alerts: OblastAlert[] = [
-  { id: 1, name: 'Kyiv Oblast', alarmed: true, drones: 2 },
-  { id: 2, name: 'Lviv Oblast', alarmed: false, drones: 0 },
+  { id: 1, name: 'Kyiv Oblast', kind: 'oblast', alarmed: true, drones: 2 },
+  { id: 2, name: 'Lviv Oblast', kind: 'oblast', alarmed: false, drones: 0 },
 ];
 
 describe('TelemetryService', () => {

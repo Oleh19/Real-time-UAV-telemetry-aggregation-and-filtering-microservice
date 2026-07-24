@@ -9,7 +9,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { Geometry } from 'geojson';
 import * as L from 'leaflet';
 
 import { DroneSample, HeatCell, ZoneFeatureCollection } from '../../../core/models/telemetry';
@@ -178,6 +177,12 @@ export class DroneMapComponent {
         this.heatmap.cellDegrees(),
       );
     });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.styleCustomZones(this.telemetry.alarmedZoneIds());
+    });
   }
 
   private initMap(): void {
@@ -267,27 +272,14 @@ export class DroneMapComponent {
       this.iconKeys.set(drone.DroneID, iconKey);
     }
     this.forgetVanished(live);
-    this.highlightCustomZones();
   }
 
-  private highlightCustomZones(): void {
+  private styleCustomZones(alarmed: Set<number>): void {
     if (!this.customZonesLayer) {
       return;
     }
-    const drones = this.latestDrones;
-    const breached = new Set<number>();
-    for (const feature of this.customZones.zones().features) {
-      const id = feature.properties?.id;
-      if (typeof id !== 'number') {
-        continue;
-      }
-      const polygons = polygonsOf(feature.geometry);
-      if (drones.some((drone) => pointInPolygons(drone.Longitude, drone.Latitude, polygons))) {
-        breached.add(id);
-      }
-    }
     this.customZonesLayer.setStyle((feature) =>
-      breached.has(Number(feature?.properties?.['id'])) ? breachedCustomZoneStyle : customZoneStyle,
+      alarmed.has(Number(feature?.properties?.['id'])) ? breachedCustomZoneStyle : customZoneStyle,
     );
   }
 
@@ -376,7 +368,7 @@ export class DroneMapComponent {
         layer.bindTooltip(String(feature.properties?.['name'] ?? 'custom zone'));
       },
     }).addTo(this.map);
-    this.highlightCustomZones();
+    this.styleCustomZones(this.telemetry.alarmedZoneIds());
   }
 
   private renderZonePreview(drawing: boolean, vertices: ZoneVertex[]): void {
@@ -453,37 +445,6 @@ function bearingDegrees(from: L.LatLng, to: L.LatLng): number | null {
     return null;
   }
   return (Math.atan2(deltaLon, deltaLat) * 180) / Math.PI;
-}
-
-function polygonsOf(geometry: Geometry): number[][][][] {
-  if (geometry.type === 'Polygon') {
-    return [geometry.coordinates as number[][][]];
-  }
-  if (geometry.type === 'MultiPolygon') {
-    return geometry.coordinates as number[][][][];
-  }
-  return [];
-}
-
-function pointInPolygons(longitude: number, latitude: number, polygons: number[][][][]): boolean {
-  return polygons.some((rings) => pointInRings(longitude, latitude, rings));
-}
-
-function pointInRings(longitude: number, latitude: number, rings: number[][][]): boolean {
-  let inside = false;
-  for (const ring of rings) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-      const [lonI, latI] = ring[i];
-      const [lonJ, latJ] = ring[j];
-      if (
-        latI > latitude !== latJ > latitude &&
-        longitude < ((lonJ - lonI) * (latitude - latI)) / (latJ - latI) + lonI
-      ) {
-        inside = !inside;
-      }
-    }
-  }
-  return inside;
 }
 
 function heatStyle(samples: number, peak: number): L.PathOptions {

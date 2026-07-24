@@ -59,7 +59,12 @@ test('toggles between light and dark themes', async ({ page }) => {
   await expect.poll(async () => root.getAttribute('data-theme')).not.toBe(before);
 });
 
-test('highlights a custom zone while a drone is inside it', async ({ page }) => {
+test('highlights a custom zone the geofence reports as alarmed', async ({ page }) => {
+  await page.route('**/api/alert-stream', (route) =>
+    route.fulfill(
+      sse([{ id: 5000001, name: 'Test zone', kind: 'custom', alarmed: true, drones: 1 }]),
+    ),
+  );
   await page.route('**/api/custom-zones', (route) =>
     route.fulfill({
       contentType: 'application/json',

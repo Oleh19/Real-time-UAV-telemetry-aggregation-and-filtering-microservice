@@ -55,6 +55,7 @@ func run(logger *slog.Logger) error {
 
 	go deps.zoneIndex.Run(ctx, deps.repo, 15*time.Second, logger)
 	go deps.friendlyCache.Run(ctx, deps.repo, 30*time.Second, logger)
+	go deps.customZones.Run(ctx, deps.repo, 10*time.Second, logger)
 	go geofence.RunRetention(ctx, deps.repo, cfg.HistoryRetention, logger)
 	go publishShardState(ctx, deps, cfg.ReplicaID, logger)
 

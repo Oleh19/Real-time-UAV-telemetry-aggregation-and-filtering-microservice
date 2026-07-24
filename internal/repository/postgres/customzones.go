@@ -58,6 +58,31 @@ func (r *Repository) DeleteCustomZone(ctx context.Context, id telemetry.ZoneID) 
 	return tag.RowsAffected() > 0, nil
 }
 
+func (r *Repository) ListCustomZones(ctx context.Context) ([]telemetry.Zone, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM custom_zones ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("query custom zones: %w", err)
+	}
+	defer rows.Close()
+
+	zones := make([]telemetry.Zone, 0)
+	for rows.Next() {
+		var z telemetry.Zone
+		if err := rows.Scan(&z.ID, &z.Name); err != nil {
+			return nil, fmt.Errorf("scan custom zone: %w", err)
+		}
+		z.ID += CustomZoneIDOffset
+		zones = append(zones, z)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate custom zones: %w", err)
+	}
+	return zones, nil
+}
+
 func (r *Repository) ListCustomZoneFeatures(ctx context.Context) ([]ZoneFeature, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

@@ -50,6 +50,16 @@
   white-space: nowrap;
 }
 
+.zone-tag {
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-warn);
+  color: var(--color-text);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
 .oblast-drones {
   flex-shrink: 0;
   padding: 0 var(--space-1);

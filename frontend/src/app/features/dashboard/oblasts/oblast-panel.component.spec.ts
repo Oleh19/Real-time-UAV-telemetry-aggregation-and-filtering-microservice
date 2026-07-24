@@ -19,8 +19,8 @@ function setup(alerts: OblastAlert[]) {
 describe('OblastPanelComponent', () => {
   it('marks alarmed oblasts red and shows the alarm count', () => {
     const element = setup([
-      { id: 1, name: 'Kyiv Oblast', alarmed: true, drones: 2 },
-      { id: 2, name: 'Lviv Oblast', alarmed: false, drones: 0 },
+      { id: 1, name: 'Kyiv Oblast', kind: 'oblast', alarmed: true, drones: 2 },
+      { id: 2, name: 'Lviv Oblast', kind: 'oblast', alarmed: false, drones: 0 },
     ]);
     const alarmed = element.querySelectorAll('.oblast-alarmed');
     expect(alarmed.length).toBe(1);
