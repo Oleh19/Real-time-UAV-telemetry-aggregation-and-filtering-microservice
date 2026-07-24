@@ -201,6 +201,52 @@ func TestLoadSimulator(t *testing.T) {
 	}
 }
 
+func TestLoadNotifier(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr bool
+	}{
+		{name: "defaults"},
+		{
+			name:    "telegram token without chat id",
+			env:     map[string]string{"TELEGRAM_BOT_TOKEN": "token"},
+			wantErr: true,
+		},
+		{
+			name: "telegram token with chat id",
+			env:  map[string]string{"TELEGRAM_BOT_TOKEN": "token", "TELEGRAM_CHAT_ID": "12345"},
+		},
+		{
+			name:    "request timeout below minimum",
+			env:     map[string]string{"NOTIFY_REQUEST_TIMEOUT": "10ms"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearNotifierEnv(t)
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			_, err := config.LoadNotifier()
+			if tt.wantErr && err == nil {
+				t.Fatal("LoadNotifier() error = nil, want error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("LoadNotifier() error = %v", err)
+			}
+		})
+	}
+}
+
+func clearNotifierEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"NATS_URL", "HTTP_ADDR", "NOTIFY_DURABLE", "NOTIFY_ON_EXIT", "NOTIFY_REQUEST_TIMEOUT", "WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_BASE_URL"} {
+		t.Setenv(key, "")
+	}
+}
+
 func clearServerEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{"GRPC_ADDR", "HTTP_ADDR", "NATS_URL", "WORKER_COUNT", "QUEUE_SIZE", "STATE_TTL"} {

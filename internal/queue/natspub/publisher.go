@@ -73,6 +73,27 @@ func replicasFromEnv() int {
 	return 1
 }
 
+func NewJetStreamContext(conn *nats.Conn) (jetstream.JetStream, error) {
+	js, err := jetstream.New(conn)
+	if err != nil {
+		return nil, fmt.Errorf("create jetstream context: %w", err)
+	}
+	return js, nil
+}
+
+func EnsureAlertsStream(ctx context.Context, js jetstream.JetStream) error {
+	if _, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:     AlertsStreamName,
+		Subjects: []string{SubjectAlerts},
+		Storage:  storageFromEnv(),
+		Replicas: replicasFromEnv(),
+		MaxAge:   streamMaxAge,
+	}); err != nil {
+		return fmt.Errorf("ensure stream %s: %w", AlertsStreamName, err)
+	}
+	return nil
+}
+
 func ensureStreams(ctx context.Context, js jetstream.JetStream, partitionCount int) error {
 	if partitionCount < 1 {
 		partitionCount = 1

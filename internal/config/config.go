@@ -63,6 +63,18 @@ type Geofence struct {
 	PartitionCount    int
 }
 
+type Notifier struct {
+	NATSURL         string
+	HTTPAddr        string
+	DurableName     string
+	NotifyOnExit    bool
+	RequestTimeout  time.Duration
+	WebhookURL      string
+	TelegramToken   string
+	TelegramChatID  string
+	TelegramBaseURL string
+}
+
 func LoadServer() (Server, error) {
 	workerCount, err := env.Int("WORKER_COUNT", 8)
 	if err != nil {
@@ -166,6 +178,35 @@ func LoadSimulator() (Simulator, error) {
 	}
 	if cfg.SendInterval < 10*time.Millisecond {
 		return Simulator{}, fmt.Errorf("validate SEND_INTERVAL: must be >= 10ms, got %s", cfg.SendInterval)
+	}
+	return cfg, nil
+}
+
+func LoadNotifier() (Notifier, error) {
+	notifyOnExit, err := env.Bool("NOTIFY_ON_EXIT", false)
+	if err != nil {
+		return Notifier{}, err
+	}
+	requestTimeout, err := env.Duration("NOTIFY_REQUEST_TIMEOUT", 10*time.Second)
+	if err != nil {
+		return Notifier{}, err
+	}
+	cfg := Notifier{
+		NATSURL:         env.String("NATS_URL", "nats://localhost:4222"),
+		HTTPAddr:        env.String("HTTP_ADDR", ":8082"),
+		DurableName:     env.String("NOTIFY_DURABLE", "notifier"),
+		NotifyOnExit:    notifyOnExit,
+		RequestTimeout:  requestTimeout,
+		WebhookURL:      env.String("WEBHOOK_URL", ""),
+		TelegramToken:   env.String("TELEGRAM_BOT_TOKEN", ""),
+		TelegramChatID:  env.String("TELEGRAM_CHAT_ID", ""),
+		TelegramBaseURL: env.String("TELEGRAM_BASE_URL", "https://api.telegram.org"),
+	}
+	if cfg.RequestTimeout < time.Second {
+		return Notifier{}, fmt.Errorf("validate NOTIFY_REQUEST_TIMEOUT: must be >= 1s, got %s", cfg.RequestTimeout)
+	}
+	if cfg.TelegramToken != "" && cfg.TelegramChatID == "" {
+		return Notifier{}, fmt.Errorf("validate TELEGRAM_CHAT_ID: required when TELEGRAM_BOT_TOKEN is set")
 	}
 	return cfg, nil
 }
