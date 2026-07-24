@@ -92,6 +92,68 @@ test('highlights a custom zone while a drone is inside it', async ({ page }) => 
   await expect(page.locator('path[stroke="#d64545"]').first()).toBeVisible({ timeout: 10000 });
 });
 
+test('shows the custom zone name on hover, not the oblast beneath it', async ({ page }) => {
+  await page.route('**/api/stream', (route) => route.fulfill(sse({ drones: [], stats })));
+  await page.route('**/api/zones', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { id: 1, name: 'Kyiv Oblast' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [29, 49],
+                  [33, 49],
+                  [33, 52],
+                  [29, 52],
+                  [29, 49],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    }),
+  );
+  await page.route('**/api/custom-zones', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { id: 5000001, name: 'HQ perimeter' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [30.4, 50.3],
+                  [30.6, 50.3],
+                  [30.6, 50.5],
+                  [30.4, 50.5],
+                  [30.4, 50.3],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    }),
+  );
+
+  await page.goto('/');
+
+  await page.locator('.leaflet-customZones-pane path').first().hover();
+  const tooltip = page.locator('.leaflet-tooltip');
+  await expect(tooltip).toHaveText('HQ perimeter');
+});
+
 test('filters the target table', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: 'Targets' }).click();

@@ -22,6 +22,7 @@ import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
 const MAP_CENTER: L.LatLngExpression = [48.7, 31.2];
 const MAP_ZOOM = 6;
 const CULL_MARGIN = 0.5;
+const customZonePane = 'customZones';
 
 const calmZoneStyle: L.PathOptions = {
   color: '#8b98a9',
@@ -181,6 +182,7 @@ export class DroneMapComponent {
 
   private initMap(): void {
     this.map = L.map(this.mapHost().nativeElement, { center: MAP_CENTER, zoom: MAP_ZOOM });
+    this.map.createPane(customZonePane).style.zIndex = '450';
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
@@ -368,6 +370,7 @@ export class DroneMapComponent {
     }
     this.customZonesLayer?.remove();
     this.customZonesLayer = L.geoJSON(zones, {
+      pane: customZonePane,
       style: customZoneStyle,
       onEachFeature: (feature, layer) => {
         layer.bindTooltip(String(feature.properties?.['name'] ?? 'custom zone'));
