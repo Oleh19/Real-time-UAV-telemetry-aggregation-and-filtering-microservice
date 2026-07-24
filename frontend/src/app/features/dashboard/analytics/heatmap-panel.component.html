@@ -1,0 +1,36 @@
+<section class="panel" aria-label="Incursion heatmap">
+  <header class="panel-header">
+    <h2>Incursion heatmap</h2>
+    <button
+      type="button"
+      class="heatmap-toggle"
+      [class.heatmap-toggle-active]="heatmap.visible()"
+      (click)="toggle()"
+    >
+      {{ heatmap.visible() ? 'Hide' : 'Show' }}
+    </button>
+  </header>
+  <div class="heatmap-windows" role="group" aria-label="Time window">
+    @for (window of windows; track window.label; let i = $index) {
+      <button
+        type="button"
+        class="window-option"
+        [class.window-option-active]="i === selected()"
+        (click)="select(i)"
+      >
+        {{ window.label }}
+      </button>
+    }
+  </div>
+  @if (heatmap.visible()) {
+    @if (heatmap.loading()) {
+      <p class="placeholder">Loading density…</p>
+    } @else if (heatmap.cells().length === 0) {
+      <p class="placeholder">No recorded incursions in this window</p>
+    } @else {
+      <p class="heatmap-summary">
+        {{ heatmap.cells().length }} cells · peak {{ heatmap.peakSamples() }} samples
+      </p>
+    }
+  }
+</section>

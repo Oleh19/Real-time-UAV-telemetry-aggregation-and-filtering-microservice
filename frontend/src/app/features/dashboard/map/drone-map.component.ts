@@ -10,8 +10,9 @@ import {
 } from '@angular/core';
 import * as L from 'leaflet';
 
-import { DroneSample, ZoneFeatureCollection } from '../../../core/models/telemetry';
+import { DroneSample, HeatCell, ZoneFeatureCollection } from '../../../core/models/telemetry';
 import { TelemetryService } from '../../../core/telemetry.service';
+import { HeatmapService } from '../analytics/heatmap.service';
 import { TrackHistoryService } from '../history/track-history.service';
 import { DronePrediction, PredictionService } from '../prediction/prediction.service';
 import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
@@ -80,6 +81,7 @@ export class DroneMapComponent {
   private readonly history = inject(TrackHistoryService);
   private readonly customZones = inject(CustomZonesService);
   private readonly prediction = inject(PredictionService);
+  private readonly heatmap = inject(HeatmapService);
   private readonly mapHost = viewChild.required<ElementRef<HTMLDivElement>>('mapHost');
 
   private readonly mapReady = signal(false);
@@ -89,6 +91,7 @@ export class DroneMapComponent {
   private zonePreviewLayer?: L.Polygon;
   private trackLayer?: L.Polyline;
   private playbackMarker?: L.CircleMarker;
+  private heatLayer?: L.LayerGroup;
   private readonly zoneLayersById = new Map<number, L.Path>();
   private readonly markers = new Map<string, L.Marker>();
   private readonly predictionLines = new Map<string, L.Polyline>();
@@ -145,6 +148,16 @@ export class DroneMapComponent {
         return;
       }
       this.renderPredictions(this.prediction.predictions());
+    });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderHeatmap(
+        this.heatmap.cells(),
+        this.heatmap.peakSamples(),
+        this.heatmap.cellDegrees(),
+      );
     });
   }
 
@@ -226,6 +239,28 @@ export class DroneMapComponent {
         this.iconKeys.delete(id);
       }
     }
+  }
+
+  private renderHeatmap(cells: HeatCell[], peak: number, cellDegrees: number): void {
+    if (!this.map) {
+      return;
+    }
+    this.heatLayer?.remove();
+    this.heatLayer = undefined;
+    if (cells.length === 0 || peak <= 0) {
+      return;
+    }
+    const half = cellDegrees / 2;
+    const rectangles = cells.map((cell) => {
+      const bounds: L.LatLngBoundsExpression = [
+        [cell.latitude - half, cell.longitude - half],
+        [cell.latitude + half, cell.longitude + half],
+      ];
+      return L.rectangle(bounds, heatStyle(cell.samples, peak)).bindTooltip(
+        `${cell.samples} samples · ${cell.drones} drones`,
+      );
+    });
+    this.heatLayer = L.layerGroup(rectangles).addTo(this.map);
   }
 
   private renderPredictions(predictions: DronePrediction[]): void {
@@ -341,6 +376,16 @@ function bearingDegrees(from: L.LatLng, to: L.LatLng): number | null {
     return null;
   }
   return (Math.atan2(deltaLon, deltaLat) * 180) / Math.PI;
+}
+
+function heatStyle(samples: number, peak: number): L.PathOptions {
+  const intensity = Math.sqrt(samples / peak);
+  const hue = 60 - 60 * intensity;
+  return {
+    stroke: false,
+    fillColor: `hsl(${hue}, 90%, 55%)`,
+    fillOpacity: 0.2 + 0.5 * intensity,
+  };
 }
 
 function confidenceColor(level: number): string {

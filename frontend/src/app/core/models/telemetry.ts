@@ -20,6 +20,13 @@ export interface FriendlySquawk {
   label: string;
 }
 
+export interface HeatCell {
+  latitude: number;
+  longitude: number;
+  samples: number;
+  drones: number;
+}
+
 export interface IngestStats {
   Received: number;
   Dropped: number;

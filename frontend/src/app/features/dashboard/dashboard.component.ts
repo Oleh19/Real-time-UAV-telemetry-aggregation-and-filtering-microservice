@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
+import { HeatmapPanelComponent } from './analytics/heatmap-panel.component';
 import { BreachFeedComponent } from './breaches/breach-feed.component';
 import { DroneListComponent } from './drones/drone-list.component';
 import { PlaybackPanelComponent } from './history/playback-panel.component';
@@ -25,6 +26,7 @@ import { ZonePanelComponent } from './zones/zone-panel.component';
     SwarmPanelComponent,
     StationPanelComponent,
     ThreatPanelComponent,
+    HeatmapPanelComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',

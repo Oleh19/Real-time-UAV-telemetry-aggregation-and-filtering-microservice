@@ -138,6 +138,55 @@ func TestListHistoryReturnsOrderedWindow(t *testing.T) {
 	}
 }
 
+func TestIncursionHeatmapAggregatesByCell(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	repo := postgres.NewRepository(pool)
+
+	first := telemetry.DroneID("itest-heat-001")
+	second := telemetry.DroneID("itest-heat-002")
+	far := telemetry.DroneID("itest-heat-003")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM telemetry_history WHERE drone_id IN ($1, $2, $3)`, string(first), string(second), string(far))
+	})
+
+	base := time.Now().UTC().Truncate(time.Second).Add(-30 * time.Minute)
+	var samples []telemetry.Sample
+	for n := range 4 {
+		ts := base.Add(time.Duration(n) * time.Minute)
+		samples = append(samples,
+			telemetry.Sample{DroneID: first, Timestamp: ts, Latitude: 50.02, Longitude: 30.02, Altitude: 100, Speed: 20, Confidence: 90},
+			telemetry.Sample{DroneID: second, Timestamp: ts.Add(time.Second), Latitude: 50.06, Longitude: 30.07, Altitude: 100, Speed: 20, Confidence: 90},
+		)
+	}
+	samples = append(samples, telemetry.Sample{DroneID: far, Timestamp: base, Latitude: 48.5, Longitude: 25.5, Altitude: 100, Speed: 20, Confidence: 90})
+	if err := repo.SaveHistoryBatch(ctx, samples); err != nil {
+		t.Fatalf("SaveHistoryBatch: %v", err)
+	}
+
+	cells, err := repo.IncursionHeatmap(ctx, base.Add(-time.Minute), base.Add(10*time.Minute), 0.25)
+	if err != nil {
+		t.Fatalf("IncursionHeatmap: %v", err)
+	}
+
+	var hot *postgres.HeatCell
+	for i := range cells {
+		if cells[i].Latitude == 50.125 && cells[i].Longitude == 30.125 {
+			hot = &cells[i]
+			break
+		}
+	}
+	if hot == nil {
+		t.Fatalf("expected a hot cell at 50.125,30.125, got %+v", cells)
+	}
+	if hot.Samples != 8 {
+		t.Fatalf("hot cell samples = %d, want 8", hot.Samples)
+	}
+	if hot.Drones != 2 {
+		t.Fatalf("hot cell drones = %d, want 2", hot.Drones)
+	}
+}
+
 func TestListHistoryRangeAcrossDrones(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
