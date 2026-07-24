@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
 import { ThemeService } from './core/theme.service';
@@ -12,4 +12,5 @@ import { ThemeService } from './core/theme.service';
 })
 export class App {
   protected readonly theme = inject(ThemeService);
+  protected readonly themeLabel = computed(() => (this.theme.isDark() ? '☀︎ Light' : '☾︎ Dark'));
 }

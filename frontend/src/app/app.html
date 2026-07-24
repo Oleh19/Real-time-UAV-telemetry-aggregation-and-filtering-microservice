@@ -8,7 +8,7 @@
     [attr.aria-label]="theme.isDark() ? 'Switch to light theme' : 'Switch to dark theme'"
     (click)="theme.toggle()"
   >
-    {{ theme.isDark() ? '☀ Light' : '☾ Dark' }}
+    {{ themeLabel() }}
   </button>
 </header>
 <main id="main-content" class="app-main">
