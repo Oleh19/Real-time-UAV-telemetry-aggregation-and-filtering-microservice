@@ -2,6 +2,7 @@ GO_IMAGE = golang:1.26.5
 LINT_IMAGE = golangci/golangci-lint:v2.12.2
 BUF_IMAGE = bufbuild/buf:1.72.0
 NODE_IMAGE = node:22
+PLAYWRIGHT_IMAGE = mcr.microsoft.com/playwright:v1.49.1-jammy
 
 DOCKER_NODE = docker run --rm \
 	-v "$(CURDIR)":/work -w /work \
@@ -22,7 +23,7 @@ DOCKER_GO = docker run --rm \
 
 ITEST_PROJECT = uavmonitor-itest
 
-.PHONY: build test itest vet fmt lint tidy vuln proto up down check prettier prettier-check web-install web-lint web-test web-build
+.PHONY: build test itest vet fmt lint tidy vuln proto up down check prettier prettier-check web-install web-lint web-test web-build e2e
 
 GO_PKGS = ./cmd/... ./internal/...
 
@@ -85,6 +86,13 @@ web-test:
 
 web-build:
 	$(DOCKER_WEB) npx ng build
+
+e2e: web-build
+	docker run --rm \
+		-v "$(CURDIR)":/work -w /work/e2e \
+		-v uavmonitor-npmcache:/root/.npm \
+		$(PLAYWRIGHT_IMAGE) \
+		sh -c "npm ci && npx playwright test"
 
 check: vet lint test vuln prettier-check
 

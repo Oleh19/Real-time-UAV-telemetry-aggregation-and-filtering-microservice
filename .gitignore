@@ -17,6 +17,8 @@ node_modules/
 frontend/dist/
 frontend/.angular/
 frontend/coverage/
+e2e/test-results/
+e2e/playwright-report/
 
 .DS_Store
 .idea/
