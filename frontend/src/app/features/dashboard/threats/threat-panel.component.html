@@ -1,0 +1,28 @@
+<section class="panel" aria-label="Threat priority">
+  <header class="panel-header">
+    <h2>Threats</h2>
+  </header>
+  @if (threats().length > 0) {
+    <ul class="threats">
+      @for (threat of threats(); track threat.droneId) {
+        <li class="threat" [attr.data-level]="level(threat.score)">
+          <div class="threat-head">
+            <span class="threat-id">{{ threat.droneId }}</span>
+            <span class="threat-score">{{ threat.score }}</span>
+          </div>
+          <div class="threat-meta">
+            <span>{{ threat.targetClass }}</span>
+            @if (threat.zoneName) {
+              <span>→ {{ threat.zoneName }} {{ eta(threat.etaSeconds) }}</span>
+            }
+            @if (threat.anomaly) {
+              <span class="threat-spoof">spoof?</span>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">No targets to rank</p>
+  }
+</section>

@@ -8,6 +8,7 @@ import { MetricsPanelComponent } from './metrics/metrics-panel.component';
 import { OblastPanelComponent } from './oblasts/oblast-panel.component';
 import { StationPanelComponent } from './stations/station-panel.component';
 import { SwarmPanelComponent } from './swarms/swarm-panel.component';
+import { ThreatPanelComponent } from './threats/threat-panel.component';
 import { ZonePanelComponent } from './zones/zone-panel.component';
 
 @Component({
@@ -23,6 +24,7 @@ import { ZonePanelComponent } from './zones/zone-panel.component';
     ZonePanelComponent,
     SwarmPanelComponent,
     StationPanelComponent,
+    ThreatPanelComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
