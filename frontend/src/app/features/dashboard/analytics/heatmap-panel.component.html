@@ -23,6 +23,29 @@
     }
   </div>
   @if (heatmap.visible()) {
+    <div class="timelapse">
+      <button
+        type="button"
+        class="play-toggle"
+        [attr.aria-pressed]="heatmap.playing()"
+        (click)="playPause()"
+      >
+        {{ heatmap.playing() ? '❚❚ Pause' : '▶ Time-lapse' }}
+      </button>
+      @if (heatmap.frameCount() > 1) {
+        <label class="scrubber">
+          <span class="sr-only">Time-lapse frame</span>
+          <input
+            type="range"
+            min="0"
+            [max]="heatmap.frameCount() - 1"
+            [value]="heatmap.frameIndex()"
+            (input)="scrub($any($event.target).value)"
+          />
+        </label>
+        <span class="frame-label">{{ heatmap.frameLabel() }}</span>
+      }
+    </div>
     @if (heatmap.loading()) {
       <p class="placeholder">Loading density…</p>
     } @else if (heatmap.cells().length === 0) {

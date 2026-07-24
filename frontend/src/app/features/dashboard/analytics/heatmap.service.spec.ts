@@ -41,6 +41,26 @@ describe('HeatmapService', () => {
     expect(service.cellDegrees()).toBe(0.25);
   });
 
+  it('builds animation frames and a global peak from a time-lapse fetch', () => {
+    service.playTimelapse(12, 0.25);
+
+    const requests = http.match((r) => r.url === '/api/analytics/heatmap');
+    expect(requests.length).toBe(12);
+    requests.forEach((req, i) => {
+      req.flush([{ latitude: 50, longitude: 30, samples: i, drones: 1 }]);
+    });
+
+    expect(service.frameCount()).toBe(12);
+    expect(service.peakSamples()).toBe(11);
+    expect(service.visible()).toBeTrue();
+
+    service.setFrame(3);
+    expect(service.playing()).toBeFalse();
+    expect(service.cells()[0].samples).toBe(3);
+
+    service.pause();
+  });
+
   it('clears the layer when toggled off', () => {
     service.toggle(24, 0.25);
     http

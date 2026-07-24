@@ -24,4 +24,17 @@ export class HeatmapPanelComponent {
     const window = this.activeWindow();
     this.heatmap.refresh(window.hours, window.cell);
   }
+
+  protected playPause(): void {
+    if (this.heatmap.playing()) {
+      this.heatmap.pause();
+      return;
+    }
+    const window = this.activeWindow();
+    this.heatmap.playTimelapse(window.hours, window.cell);
+  }
+
+  protected scrub(value: string): void {
+    this.heatmap.setFrame(Number(value));
+  }
 }
