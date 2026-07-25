@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
 import { HeatmapPanelComponent } from './analytics/heatmap-panel.component';
 import { BreachFeedComponent } from './breaches/breach-feed.component';
+import { ReplayPanelComponent } from './replays/replay-panel.component';
 import { DroneListComponent } from './drones/drone-list.component';
 import { PlaybackPanelComponent } from './history/playback-panel.component';
 import { DroneMapComponent } from './map/drone-map.component';
@@ -12,7 +13,7 @@ import { SwarmPanelComponent } from './swarms/swarm-panel.component';
 import { ThreatPanelComponent } from './threats/threat-panel.component';
 import { ZonePanelComponent } from './zones/zone-panel.component';
 
-type SideTab = 'threats' | 'picture' | 'targets' | 'zones' | 'events';
+type SideTab = 'threats' | 'picture' | 'targets' | 'zones' | 'events' | 'replay';
 
 interface TabDef {
   id: SideTab;
@@ -34,6 +35,7 @@ interface TabDef {
     StationPanelComponent,
     ThreatPanelComponent,
     HeatmapPanelComponent,
+    ReplayPanelComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -45,6 +47,7 @@ export class DashboardComponent {
     { id: 'targets', label: 'Targets' },
     { id: 'zones', label: 'Zones' },
     { id: 'events', label: 'Events' },
+    { id: 'replay', label: 'Replay' },
   ];
   protected readonly activeTab = signal<SideTab>('threats');
 

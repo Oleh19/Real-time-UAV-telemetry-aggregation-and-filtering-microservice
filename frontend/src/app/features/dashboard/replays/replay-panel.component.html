@@ -1,0 +1,83 @@
+<section class="panel" aria-label="History replays">
+  <header class="panel-header">
+    <h2>Replays</h2>
+    <span class="count">{{ replays.replays().length }}</span>
+  </header>
+
+  <form class="start" (submit)="start(); $event.preventDefault()">
+    <label>
+      <span>From</span>
+      <input type="datetime-local" [value]="from()" (input)="from.set($any($event.target).value)" />
+    </label>
+    <label>
+      <span>To</span>
+      <input type="datetime-local" [value]="to()" (input)="to.set($any($event.target).value)" />
+    </label>
+    <label class="narrow">
+      <span>Speed</span>
+      <input
+        type="number"
+        min="0.1"
+        max="1000"
+        step="0.1"
+        [value]="speed()"
+        (input)="speed.set($any($event.target).valueAsNumber)"
+      />
+    </label>
+    <label class="narrow">
+      <span>Drone</span>
+      <input
+        type="text"
+        placeholder="all"
+        [value]="droneId()"
+        (input)="droneId.set($any($event.target).value)"
+      />
+    </label>
+    <button type="submit" class="start-btn">Replay</button>
+  </form>
+
+  @if (replays.replays().length > 0) {
+    <ul class="runs">
+      @for (run of replays.replays(); track run.id) {
+        <li class="run" [attr.data-state]="run.state">
+          <div class="run-head">
+            <span class="run-id">{{ run.id }}</span>
+            <span class="run-state">{{
+              run.paused && run.state === 'running' ? 'paused' : run.state
+            }}</span>
+          </div>
+          <div class="run-meta">
+            {{ run.published }} / {{ run.total }} · {{ run.speed }}×
+            @if (run.droneId) {
+              · {{ run.droneId }}
+            }
+            · started {{ run.startedAt | date: 'HH:mm:ss' }}
+          </div>
+          @if (run.state === 'running') {
+            <div class="run-actions">
+              @if (run.paused) {
+                <button type="button" (click)="replays.resume(run.id)">resume</button>
+              } @else {
+                <button type="button" (click)="replays.pause(run.id)">pause</button>
+              }
+              <label class="speed-edit">
+                <span class="sr-only">Speed for {{ run.id }}</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="1000"
+                  step="0.1"
+                  [value]="run.speed"
+                  (change)="changeSpeed(run.id, $any($event.target).value)"
+                />
+              </label>
+              <button type="button" class="danger" (click)="replays.cancel(run.id)">cancel</button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="placeholder">No replays — pick a window and press Replay</p>
+  }
+</section>

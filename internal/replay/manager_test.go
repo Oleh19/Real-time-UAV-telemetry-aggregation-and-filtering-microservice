@@ -159,6 +159,80 @@ func TestReplayCancelStopsPublishing(t *testing.T) {
 	}
 }
 
+func TestReplayPauseFreezesThenResumes(t *testing.T) {
+	base := time.Now().Add(-time.Hour)
+	source := &fakeSource{samples: recordedTrack(base, 1000, 10)}
+	publisher := &capturingPublisher{}
+	manager := replay.NewManager(source, publisher, discardLogger(), 4, 0)
+	defer manager.Close()
+
+	status, err := manager.Start(context.Background(), replay.Request{From: base, To: base.Add(time.Hour), Speed: 10})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, err := manager.SetPaused(status.ID, true); err != nil {
+		t.Fatalf("SetPaused: %v", err)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	c1 := publisher.count()
+	time.Sleep(200 * time.Millisecond)
+	if c2 := publisher.count(); c2 != c1 {
+		t.Fatalf("paused replay kept publishing: %d -> %d", c1, c2)
+	}
+	if c1 == 10 {
+		t.Fatal("replay completed before it could be paused; test is not exercising pause")
+	}
+	for _, s := range manager.List() {
+		if s.ID == status.ID && !s.Paused {
+			t.Fatal("status does not report the replay as paused")
+		}
+	}
+
+	if _, err := manager.SetPaused(status.ID, false); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if !waitState(manager, status.ID, replay.StateCompleted) {
+		t.Fatal("resumed replay never completed")
+	}
+	if publisher.count() != 10 {
+		t.Fatalf("published %d samples after resume, want 10", publisher.count())
+	}
+}
+
+func TestReplayControlValidation(t *testing.T) {
+	base := time.Now().Add(-time.Hour)
+	source := &fakeSource{samples: recordedTrack(base, 1000, 10)}
+	manager := replay.NewManager(source, &capturingPublisher{}, discardLogger(), 4, 0)
+	defer manager.Close()
+
+	status, err := manager.Start(context.Background(), replay.Request{From: base, To: base.Add(time.Hour), Speed: 10})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := manager.SetSpeed("replay-999", 5); !errors.Is(err, replay.ErrNotFound) {
+		t.Errorf("SetSpeed unknown = %v, want ErrNotFound", err)
+	}
+	if _, err := manager.SetSpeed(status.ID, 5000); !errors.Is(err, replay.ErrInvalidSpeed) {
+		t.Errorf("SetSpeed 5000 = %v, want ErrInvalidSpeed", err)
+	}
+	updated, err := manager.SetSpeed(status.ID, 25)
+	if err != nil || updated.Speed != 25 {
+		t.Fatalf("SetSpeed 25 = (%+v, %v), want speed 25", updated, err)
+	}
+
+	if err := manager.Cancel(status.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if !waitState(manager, status.ID, replay.StateCancelled) {
+		t.Fatal("replay never cancelled")
+	}
+	if _, err := manager.SetPaused(status.ID, true); !errors.Is(err, replay.ErrNotRunning) {
+		t.Errorf("SetPaused on finished replay = %v, want ErrNotRunning", err)
+	}
+}
+
 func TestReplayLimitsConcurrentRuns(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 	source := &fakeSource{samples: recordedTrack(base, 500, 50)}

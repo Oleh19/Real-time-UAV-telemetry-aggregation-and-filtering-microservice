@@ -21,6 +21,7 @@ var (
 	ErrInvalidRange   = errors.New("replay range is invalid: from must be before to")
 	ErrInvalidSpeed   = errors.New("replay speed must be within [0.1, 1000]")
 	ErrNotFound       = errors.New("replay not found")
+	ErrNotRunning     = errors.New("replay is not running")
 )
 
 const (
@@ -52,6 +53,7 @@ type Status struct {
 	ID        string    `json:"id"`
 	State     State     `json:"state"`
 	Speed     float64   `json:"speed"`
+	Paused    bool      `json:"paused"`
 	From      time.Time `json:"from"`
 	To        time.Time `json:"to"`
 	DroneID   string    `json:"droneId,omitempty"`
@@ -84,6 +86,32 @@ func (r *run) incrementPublished() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.status.Published++
+}
+
+func (r *run) control() (speed float64, paused bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.status.Speed, r.status.Paused
+}
+
+func (r *run) setSpeed(speed float64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.status.State != StateRunning {
+		return false
+	}
+	r.status.Speed = speed
+	return true
+}
+
+func (r *run) setPaused(paused bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.status.State != StateRunning {
+		return false
+	}
+	r.status.Paused = paused
+	return true
 }
 
 type Manager struct {
@@ -179,41 +207,46 @@ func (m *Manager) Start(ctx context.Context, req Request) (Status, error) {
 	return active.snapshot(), nil
 }
 
+const replayTick = 50 * time.Millisecond
+
 func (m *Manager) play(ctx context.Context, active *run, samples []telemetry.Sample) {
 	defer active.cancel()
 	id := active.snapshot().ID
 	prefix := id + "/"
 	base := samples[0].Timestamp
-	speed := active.snapshot().Speed
-	startedAt := time.Now()
 
-	for _, sample := range samples {
-		offset := time.Duration(float64(sample.Timestamp.Sub(base)) / speed)
-		if wait := time.Until(startedAt.Add(offset)); wait > 0 {
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				active.setState(StateCancelled)
-				m.logger.Info("replay cancelled", "replay_id", id, "published", active.snapshot().Published)
+	ticker := time.NewTicker(replayTick)
+	defer ticker.Stop()
+
+	var cursor time.Duration
+	i := 0
+	for i < len(samples) {
+		for i < len(samples) && samples[i].Timestamp.Sub(base) <= cursor {
+			replayed := samples[i]
+			replayed.DroneID = telemetry.DroneID(prefix + string(samples[i].DroneID))
+			replayed.Timestamp = time.Now()
+			if err := m.publisher.Publish(ctx, replayed); err != nil {
+				active.setState(StateFailed)
+				m.logger.Error("replay publish failed", "replay_id", id, "error", err)
 				return
-			case <-timer.C:
 			}
-		} else if ctx.Err() != nil {
+			active.incrementPublished()
+			m.samplesReplayed.Add(1)
+			i++
+		}
+		if i >= len(samples) {
+			break
+		}
+		select {
+		case <-ctx.Done():
 			active.setState(StateCancelled)
+			m.logger.Info("replay cancelled", "replay_id", id, "published", active.snapshot().Published)
 			return
+		case <-ticker.C:
+			if speed, paused := active.control(); !paused {
+				cursor += time.Duration(float64(replayTick) * speed)
+			}
 		}
-
-		replayed := sample
-		replayed.DroneID = telemetry.DroneID(prefix + string(sample.DroneID))
-		replayed.Timestamp = time.Now()
-		if err := m.publisher.Publish(ctx, replayed); err != nil {
-			active.setState(StateFailed)
-			m.logger.Error("replay publish failed", "replay_id", id, "error", err)
-			return
-		}
-		active.incrementPublished()
-		m.samplesReplayed.Add(1)
 	}
 	active.setState(StateCompleted)
 	m.logger.Info("replay completed", "replay_id", id, "published", active.snapshot().Published)
@@ -239,6 +272,35 @@ func (m *Manager) Cancel(id string) error {
 	}
 	active.cancel()
 	return nil
+}
+
+func (m *Manager) SetSpeed(id string, speed float64) (Status, error) {
+	if speed < MinSpeed || speed > MaxSpeed {
+		return Status{}, ErrInvalidSpeed
+	}
+	m.mu.Lock()
+	active, ok := m.runs[id]
+	m.mu.Unlock()
+	if !ok {
+		return Status{}, ErrNotFound
+	}
+	if !active.setSpeed(speed) {
+		return Status{}, ErrNotRunning
+	}
+	return active.snapshot(), nil
+}
+
+func (m *Manager) SetPaused(id string, paused bool) (Status, error) {
+	m.mu.Lock()
+	active, ok := m.runs[id]
+	m.mu.Unlock()
+	if !ok {
+		return Status{}, ErrNotFound
+	}
+	if !active.setPaused(paused) {
+		return Status{}, ErrNotRunning
+	}
+	return active.snapshot(), nil
 }
 
 func (m *Manager) ActiveReplays() int {

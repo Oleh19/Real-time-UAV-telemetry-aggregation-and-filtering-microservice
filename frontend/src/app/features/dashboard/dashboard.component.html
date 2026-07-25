@@ -51,6 +51,11 @@
             <app-breach-feed />
           </div>
         }
+        @case ('replay') {
+          <div role="tabpanel" id="panel-replay" aria-labelledby="tab-replay">
+            <app-replay-panel />
+          </div>
+        }
       }
     </div>
   </aside>

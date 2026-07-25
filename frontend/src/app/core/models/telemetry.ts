@@ -20,6 +20,21 @@ export interface FriendlySquawk {
   label: string;
 }
 
+export type ReplayState = 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface ReplayStatus {
+  id: string;
+  state: ReplayState;
+  speed: number;
+  paused: boolean;
+  from: string;
+  to: string;
+  droneId?: string;
+  total: number;
+  published: number;
+  startedAt: string;
+}
+
 export interface HeatCell {
   latitude: number;
   longitude: number;

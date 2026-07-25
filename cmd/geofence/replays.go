@@ -73,6 +73,60 @@ func listReplaysHandler(manager *replay.Manager, logger *slog.Logger) http.Handl
 	}
 }
 
+type controlReplayRequest struct {
+	Speed  *float64 `json:"speed"`
+	Paused *bool    `json:"paused"`
+}
+
+func controlReplayHandler(manager *replay.Manager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req controlReplayRequest
+		body := http.MaxBytesReader(w, r.Body, maxZoneBodyBytes)
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			http.Error(w, "request body must be valid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.Speed == nil && req.Paused == nil {
+			http.Error(w, "provide speed and/or paused", http.StatusBadRequest)
+			return
+		}
+		id := r.PathValue("id")
+		var status replay.Status
+		var err error
+		acted := false
+		if req.Paused != nil {
+			status, err = manager.SetPaused(id, *req.Paused)
+			acted = true
+		}
+		if err == nil && req.Speed != nil {
+			status, err = manager.SetSpeed(id, *req.Speed)
+			acted = true
+		}
+		if err != nil {
+			switch {
+			case errors.Is(err, replay.ErrNotFound):
+				http.Error(w, "replay not found", http.StatusNotFound)
+			case errors.Is(err, replay.ErrNotRunning):
+				http.Error(w, err.Error(), http.StatusConflict)
+			case errors.Is(err, replay.ErrInvalidSpeed):
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			default:
+				logger.Error("control replay", "replay_id", id, "error", err)
+				http.Error(w, "failed to control replay", http.StatusInternalServerError)
+			}
+			return
+		}
+		if !acted {
+			http.Error(w, "provide speed and/or paused", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(status); err != nil {
+			logger.Error("encode replay status", "error", err)
+		}
+	}
+}
+
 func cancelReplayHandler(manager *replay.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := manager.Cancel(r.PathValue("id")); err != nil {
