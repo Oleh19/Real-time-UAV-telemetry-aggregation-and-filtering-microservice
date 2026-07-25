@@ -43,8 +43,9 @@ func clusterPoints(points []clusterPoint, radiusMeters float64, minSize int) [][
 
 	for n, point := range points {
 		cell := cellOf(point, cellSizeDegrees)
+		colSpan := longitudeCellSpan(point.latitude)
 		for dRow := -1; dRow <= 1; dRow++ {
-			for dCol := -1; dCol <= 1; dCol++ {
+			for dCol := -colSpan; dCol <= colSpan; dCol++ {
 				neighbor := gridCell{row: cell.row + dRow, col: cell.col + dCol}
 				for _, m := range grid[neighbor] {
 					if m <= n {
@@ -80,6 +81,18 @@ func cellOf(point clusterPoint, cellSizeDegrees float64) gridCell {
 }
 
 const metersPerDegreeLatitude = 111320.0
+
+func longitudeCellSpan(latitude float64) int {
+	cosLat := math.Cos(latitude * math.Pi / 180)
+	if cosLat < 0.1 {
+		cosLat = 0.1
+	}
+	span := int(math.Ceil(1.0 / cosLat))
+	if span < 1 {
+		span = 1
+	}
+	return span
+}
 
 func pointDistanceMeters(a, b clusterPoint) float64 {
 	dLat := (b.latitude - a.latitude) * metersPerDegreeLatitude

@@ -21,6 +21,23 @@ func newDetector(cfg geofence.SwarmConfig) *geofence.SwarmDetector {
 	return geofence.NewSwarmDetector(cfg, discardLogger())
 }
 
+func TestSwarmDetectorFindsEastWestGroupAtMidLatitude(t *testing.T) {
+	detector := newDetector(geofence.SwarmConfig{RadiusMeters: 5000, MinSize: 3})
+
+	detector.Observe(positioned("target-001", 50.0, 30.0000))
+	detector.Observe(positioned("target-002", 50.0, 30.0684))
+	detector.Observe(positioned("target-003", 50.0, 30.1368))
+	detector.Evaluate(time.Now())
+
+	swarms := detector.Snapshot()
+	if len(swarms) != 1 {
+		t.Fatalf("Snapshot returned %d swarms, want 1 (east-west line within radius)", len(swarms))
+	}
+	if len(swarms[0].DroneIDs) != 3 {
+		t.Fatalf("swarm has %d members, want 3", len(swarms[0].DroneIDs))
+	}
+}
+
 func TestSwarmDetectorFindsCompactGroup(t *testing.T) {
 	detector := newDetector(geofence.SwarmConfig{RadiusMeters: 2000, MinSize: 3})
 

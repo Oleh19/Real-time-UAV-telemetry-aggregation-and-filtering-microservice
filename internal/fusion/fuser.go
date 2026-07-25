@@ -193,10 +193,11 @@ func (s *fuserShard) trackForLocked(key observationKey, sample telemetry.Sample,
 
 func (s *fuserShard) bestCandidateLocked(key observationKey, sample telemetry.Sample) *fusedTrack {
 	origin := cellOf(sample.Latitude, sample.Longitude, s.cellDegrees)
+	colSpan := longitudeCellSpan(sample.Latitude)
 	var best *fusedTrack
 	bestDistance := s.fuser.cfg.GateChiSquared
 	for dRow := -1; dRow <= 1; dRow++ {
-		for dCol := -1; dCol <= 1; dCol++ {
+		for dCol := -colSpan; dCol <= colSpan; dCol++ {
 			cell := gridCell{row: origin.row + dRow, col: origin.col + dCol}
 			for id := range s.grid[cell] {
 				track := s.tracks[id]
@@ -358,6 +359,18 @@ func cellOf(latitude, longitude, sizeDegrees float64) gridCell {
 		row: int(math.Floor((latitude + 90) / sizeDegrees)),
 		col: int(math.Floor((longitude + 180) / sizeDegrees)),
 	}
+}
+
+func longitudeCellSpan(latitude float64) int {
+	cosLat := math.Cos(latitude * math.Pi / 180)
+	if cosLat < 0.1 {
+		cosLat = 0.1
+	}
+	span := int(math.Ceil(1.0 / cosLat))
+	if span < 1 {
+		span = 1
+	}
+	return span
 }
 
 func coarseDistanceMeters(lat1, lon1, lat2, lon2 float64) float64 {
