@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -259,10 +261,20 @@ func (m *Manager) pruneFinishedLocked() {
 	if len(finished) <= maxFinishedRuns {
 		return
 	}
-	sort.Strings(finished)
+	sort.Slice(finished, func(i, j int) bool {
+		return replaySeq(finished[i]) < replaySeq(finished[j])
+	})
 	for _, id := range finished[:len(finished)-maxFinishedRuns] {
 		delete(m.runs, id)
 	}
+}
+
+func replaySeq(id string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(id, "replay-"))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (m *Manager) runningLocked() int {

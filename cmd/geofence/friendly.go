@@ -11,6 +11,11 @@ import (
 	"uavmonitor/internal/repository/postgres"
 )
 
+const (
+	maxFriendlyCodeLength  = 32
+	maxFriendlyLabelLength = 200
+)
+
 type friendlySource interface {
 	ListFriendlySquawks(ctx context.Context) ([]postgres.FriendlySquawk, error)
 }
@@ -33,7 +38,8 @@ func listFriendlyHandler(source friendlySource, logger *slog.Logger) http.Handle
 func createFriendlyHandler(deps *dependencies, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload postgres.FriendlySquawk
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		body := http.MaxBytesReader(w, r.Body, maxZoneBodyBytes)
+		if err := json.NewDecoder(body).Decode(&payload); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
@@ -41,6 +47,10 @@ func createFriendlyHandler(deps *dependencies, logger *slog.Logger) http.Handler
 		payload.Label = strings.TrimSpace(payload.Label)
 		if payload.Code == "" || payload.Label == "" {
 			http.Error(w, "code and label are required", http.StatusBadRequest)
+			return
+		}
+		if len(payload.Code) > maxFriendlyCodeLength || len(payload.Label) > maxFriendlyLabelLength {
+			http.Error(w, "code or label is too long", http.StatusBadRequest)
 			return
 		}
 		if err := deps.repo.AddFriendlySquawk(r.Context(), payload.Code, payload.Label); err != nil {

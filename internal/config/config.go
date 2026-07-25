@@ -8,6 +8,8 @@ import (
 	"uavmonitor/internal/env"
 )
 
+const maxConcurrentStreamsLimit = 1 << 20
+
 func splitAddrs(raw string) []string {
 	parts := strings.Split(raw, ",")
 	addrs := make([]string, 0, len(parts))
@@ -101,6 +103,9 @@ func LoadServer() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
+	if maxStreams < 1 || maxStreams > maxConcurrentStreamsLimit {
+		return Server{}, fmt.Errorf("validate MAX_CONCURRENT_STREAMS: must be within [1, %d], got %d", maxConcurrentStreamsLimit, maxStreams)
+	}
 	cfg := Server{
 		GRPCAddr:             env.String("GRPC_ADDR", ":50051"),
 		HTTPAddr:             env.String("HTTP_ADDR", ":8080"),
@@ -113,9 +118,6 @@ func LoadServer() (Server, error) {
 		InstanceID:           env.String("INSTANCE_ID", "target"),
 		ServeLiveAPI:         serveLiveAPI,
 		MaxConcurrentStreams: uint32(maxStreams),
-	}
-	if maxStreams < 1 {
-		return Server{}, fmt.Errorf("validate MAX_CONCURRENT_STREAMS: must be >= 1, got %d", maxStreams)
 	}
 	if cfg.PartitionCount < 1 {
 		return Server{}, fmt.Errorf("validate PARTITION_COUNT: must be >= 1, got %d", cfg.PartitionCount)

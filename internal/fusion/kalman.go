@@ -7,7 +7,7 @@ import (
 
 const (
 	initialVelocityStdDev = 60.0
-	maxPredictStep        = 10.0
+	maxPredictStep        = 30.0
 )
 
 type kalmanFilter struct {
