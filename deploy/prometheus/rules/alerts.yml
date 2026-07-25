@@ -2,7 +2,7 @@ groups:
   - name: uav-availability
     rules:
       - alert: ServiceDown
-        expr: up{job=~"server|geofence"} == 0
+        expr: up{job=~"server|geofence|notifier"} == 0
         for: 1m
         labels:
           severity: critical
@@ -58,6 +58,35 @@ groups:
         annotations:
           summary: 'Telemetry is failing to publish to JetStream'
           description: 'Publish failures have been non-zero for five minutes; check the NATS connection.'
+
+  - name: uav-threats
+    rules:
+      - alert: SpoofingSpike
+        expr: sum(rate(uav_anomalies_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Elevated rate of implausible-motion tracks'
+          description: 'Tracks are being flagged as possible spoofing at {{ $value | humanize }}/s over five minutes; check for GPS spoofing or sensor faults.'
+
+      - alert: SwarmSurge
+        expr: sum(uav_active_swarms) >= 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $value }} coordinated swarms tracked simultaneously'
+          description: 'Three or more compact target groups are active at once; possible coordinated incursion.'
+
+      - alert: NotificationDeliveryFailing
+        expr: sum(rate(uav_notifications_failed_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Outbound alert notifications are failing'
+          description: 'The notifier has failed to deliver breach notifications for five minutes; the webhook or Telegram sink is unreachable.'
 
   - name: uav-sensor-network
     rules:
