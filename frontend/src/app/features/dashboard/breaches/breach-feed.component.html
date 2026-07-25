@@ -1,6 +1,10 @@
 <section class="panel" aria-label="Zone breach journal">
   <header class="panel-header">
     <h2>Breach journal</h2>
+    <span class="export">
+      <a class="export-link" [href]="csvUrl" download>CSV</a>
+      <a class="export-link" [href]="geojsonUrl" download>GeoJSON</a>
+    </span>
   </header>
   @if (feed.breaches().length > 0) {
     <ul class="events">

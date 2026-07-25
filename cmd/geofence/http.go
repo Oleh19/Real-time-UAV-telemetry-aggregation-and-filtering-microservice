@@ -48,6 +48,7 @@ func newHTTPHandler(deps *dependencies, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /history", historyHandler(deps.repo, logger))
 	mux.HandleFunc("GET /analytics/heatmap", heatmapHandler(deps.repo, logger))
 	mux.HandleFunc("GET /breaches", breachesHandler(deps.repo, logger))
+	mux.HandleFunc("GET /breaches/export", breachExportHandler(deps.repo, logger))
 	mux.HandleFunc("POST /breaches/{id}/ack", breachStatusHandler(deps.repo, postgres.BreachStatusAcknowledged, logger))
 	mux.HandleFunc("POST /breaches/{id}/resolve", breachStatusHandler(deps.repo, postgres.BreachStatusResolved, logger))
 	mux.HandleFunc("GET /swarms", func(w http.ResponseWriter, r *http.Request) {
