@@ -187,11 +187,12 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
+	var serveErr error
 	select {
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
-	case err := <-errCh:
-		return err
+	case serveErr = <-errCh:
+		logger.Error("transport stopped; draining before exit", "error", serveErr)
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -227,5 +228,5 @@ func run(logger *slog.Logger) error {
 		"failed", stats.Failed+publisher.Failed(),
 		"rejected", stats.Rejected,
 	)
-	return nil
+	return serveErr
 }
