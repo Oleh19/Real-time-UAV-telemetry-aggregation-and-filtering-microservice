@@ -141,7 +141,7 @@ func (d *SwarmDetector) Evaluate(now time.Time) {
 			latSum += points[index].latitude
 			lonSum += points[index].longitude
 		}
-		state := d.matchLocked(members)
+		state := d.matchLocked(members, next)
 		if state == nil {
 			d.nextSwarm++
 			state = &swarmState{swarm: Swarm{
@@ -170,13 +170,16 @@ func (d *SwarmDetector) Evaluate(now time.Time) {
 	d.active = next
 }
 
-func (d *SwarmDetector) matchLocked(members map[telemetry.DroneID]struct{}) *swarmState {
+func (d *SwarmDetector) matchLocked(members map[telemetry.DroneID]struct{}, claimed map[string]*swarmState) *swarmState {
 	var best *swarmState
 	bestOverlap := 0
-	for _, state := range d.active {
+	for id, state := range d.active {
+		if _, taken := claimed[id]; taken {
+			continue
+		}
 		overlap := 0
-		for id := range members {
-			if _, ok := state.members[id]; ok {
+		for member := range members {
+			if _, ok := state.members[member]; ok {
 				overlap++
 			}
 		}

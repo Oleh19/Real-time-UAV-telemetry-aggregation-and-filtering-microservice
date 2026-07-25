@@ -38,6 +38,36 @@ func TestSwarmDetectorFindsEastWestGroupAtMidLatitude(t *testing.T) {
 	}
 }
 
+func TestSwarmDetectorKeepsBothHalvesWhenASwarmSplits(t *testing.T) {
+	detector := newDetector(geofence.SwarmConfig{RadiusMeters: 2000, MinSize: 3})
+	ids := []string{"target-001", "target-002", "target-003", "target-004", "target-005", "target-006"}
+
+	for i, id := range ids {
+		detector.Observe(positioned(id, 50.0+float64(i%2)*0.005, 30.0+float64(i)*0.002))
+	}
+	detector.Evaluate(time.Now())
+	if got := len(detector.Snapshot()); got != 1 {
+		t.Fatalf("initial snapshot = %d swarms, want 1", got)
+	}
+
+	for i, id := range ids[:3] {
+		detector.Observe(positioned(id, 50.0, 30.0+float64(i)*0.002))
+	}
+	for i, id := range ids[3:] {
+		detector.Observe(positioned(id, 50.0, 31.0+float64(i)*0.002))
+	}
+	detector.Evaluate(time.Now())
+
+	swarms := detector.Snapshot()
+	if len(swarms) != 2 {
+		t.Fatalf("after split snapshot = %d swarms, want 2 (neither half dropped)", len(swarms))
+	}
+	total := len(swarms[0].DroneIDs) + len(swarms[1].DroneIDs)
+	if total != 6 {
+		t.Fatalf("split swarms cover %d drones, want 6", total)
+	}
+}
+
 func TestSwarmDetectorFindsCompactGroup(t *testing.T) {
 	detector := newDetector(geofence.SwarmConfig{RadiusMeters: 2000, MinSize: 3})
 
