@@ -14,14 +14,15 @@ import (
 )
 
 var (
-	ErrDroneNotFound   = errors.New("drone not found")
-	ErrMissionNotFound = errors.New("mission not found")
-	ErrDroneExists     = errors.New("drone already exists")
-	ErrDroneBusy       = errors.New("drone is airborne")
-	ErrInvalidDrone    = errors.New("drone id and model are required")
-	ErrInvalidMission  = errors.New("mission needs a name, an existing drone and at least one waypoint")
-	ErrBatteryLow      = errors.New("battery too low to launch")
-	ErrBadTransition   = errors.New("operation not allowed in the current state")
+	ErrDroneNotFound     = errors.New("drone not found")
+	ErrMissionNotFound   = errors.New("mission not found")
+	ErrDroneExists       = errors.New("drone already exists")
+	ErrDroneBusy         = errors.New("drone is airborne")
+	ErrInvalidDrone      = errors.New("drone id and model are required")
+	ErrInvalidMission    = errors.New("mission needs a name, an existing drone and at least one waypoint")
+	ErrBatteryLow        = errors.New("battery too low to launch")
+	ErrBadTransition     = errors.New("operation not allowed in the current state")
+	ErrMissionRestricted = errors.New("mission route crosses a restricted zone")
 )
 
 const (
@@ -32,6 +33,10 @@ const (
 	lowBattery    = 20.0
 	fullBattery   = 100.0
 )
+
+type ZoneGuard interface {
+	RestrictedWaypoints(ctx context.Context, waypoints []Waypoint) ([]int, error)
+}
 
 type Store interface {
 	ListDrones(ctx context.Context) ([]Drone, error)
@@ -44,6 +49,7 @@ type Store interface {
 
 type Manager struct {
 	store          Store
+	guard          ZoneGuard
 	logger         *slog.Logger
 	mu             sync.Mutex
 	drones         map[string]*Drone
@@ -60,6 +66,10 @@ func NewManager(store Store, logger *slog.Logger) *Manager {
 		drones:   make(map[string]*Drone),
 		missions: make(map[string]*Mission),
 	}
+}
+
+func (m *Manager) SetZoneGuard(guard ZoneGuard) {
+	m.guard = guard
 }
 
 func (m *Manager) Load(ctx context.Context) error {
@@ -174,10 +184,21 @@ func (m *Manager) CreateMission(ctx context.Context, name, droneID string, waypo
 		return Mission{}, ErrInvalidMission
 	}
 	m.mu.Lock()
-	if _, ok := m.drones[droneID]; !ok {
-		m.mu.Unlock()
+	_, ok := m.drones[droneID]
+	m.mu.Unlock()
+	if !ok {
 		return Mission{}, ErrDroneNotFound
 	}
+	if m.guard != nil {
+		restricted, err := m.guard.RestrictedWaypoints(ctx, waypoints)
+		if err != nil {
+			return Mission{}, fmt.Errorf("check restricted zones: %w", err)
+		}
+		if len(restricted) > 0 {
+			return Mission{}, fmt.Errorf("%w: waypoint %d", ErrMissionRestricted, restricted[0]+1)
+		}
+	}
+	m.mu.Lock()
 	id := fmt.Sprintf("mission-%03d", m.nextID.Add(1))
 	mission := Mission{ID: id, Name: name, DroneID: droneID, Waypoints: waypoints, State: MissionPlanned}
 	stored := mission

@@ -68,6 +68,7 @@ func run(logger *slog.Logger) error {
 	}
 
 	manager := fleet.NewManager(repo, logger)
+	manager.SetZoneGuard(repo)
 	if err := manager.Load(ctx); err != nil {
 		return err
 	}

@@ -164,7 +164,7 @@ func writeFleetError(w http.ResponseWriter, err error, logger *slog.Logger) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, fleet.ErrInvalidDrone), errors.Is(err, fleet.ErrInvalidMission):
 		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, fleet.ErrDroneBusy), errors.Is(err, fleet.ErrBatteryLow), errors.Is(err, fleet.ErrBadTransition):
+	case errors.Is(err, fleet.ErrDroneBusy), errors.Is(err, fleet.ErrBatteryLow), errors.Is(err, fleet.ErrBadTransition), errors.Is(err, fleet.ErrMissionRestricted):
 		http.Error(w, err.Error(), http.StatusConflict)
 	default:
 		logger.Error("fleet request failed", "error", err)

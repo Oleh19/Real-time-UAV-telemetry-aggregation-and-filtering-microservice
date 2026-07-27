@@ -202,6 +202,15 @@ select:focus-visible {
   font-size: 0.72rem;
 }
 
+.error {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  background: var(--color-danger);
+  color: var(--color-text);
+  font-size: 0.72rem;
+}
+
 .placeholder {
   margin: 0;
   color: var(--color-text-muted);

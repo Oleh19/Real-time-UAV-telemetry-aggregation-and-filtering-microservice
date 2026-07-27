@@ -264,6 +264,26 @@ func TestStatsCountsCompletedAndAborted(t *testing.T) {
 	}
 }
 
+type blockGuard struct{ restricted []int }
+
+func (g blockGuard) RestrictedWaypoints(context.Context, []Waypoint) ([]int, error) {
+	return g.restricted, nil
+}
+
+func TestCreateMissionRejectsRestrictedRoute(t *testing.T) {
+	m := newManager()
+	m.SetZoneGuard(blockGuard{restricted: []int{0}})
+	mustDrone(t, m, "uav-1", 50, 30)
+	if _, err := m.CreateMission(context.Background(), "recon", "uav-1", []Waypoint{{50.1, 30.1}}); !errors.Is(err, ErrMissionRestricted) {
+		t.Fatalf("restricted route = %v, want ErrMissionRestricted", err)
+	}
+
+	m.SetZoneGuard(blockGuard{restricted: nil})
+	if _, err := m.CreateMission(context.Background(), "recon", "uav-1", []Waypoint{{50.1, 30.1}}); err != nil {
+		t.Fatalf("unrestricted route rejected: %v", err)
+	}
+}
+
 func TestLoadResetsInFlightState(t *testing.T) {
 	store := newMemStore()
 	store.drones["uav-1"] = Drone{ID: "uav-1", Model: "quad", Status: StatusEnRoute, Base: Waypoint{50, 30}, MissionID: "mission-001"}

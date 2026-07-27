@@ -1,5 +1,5 @@
-import { HttpClient } from '@angular/common/http';
-import { DestroyRef, Injectable, computed, inject } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, filter, of, switchMap, timer } from 'rxjs';
 
@@ -28,8 +28,11 @@ export class FleetService {
     { initialValue: EMPTY_FLEET },
   );
 
+  private readonly errorState = signal('');
+
   readonly drones = computed(() => this.snapshot().drones);
   readonly missions = computed(() => this.snapshot().missions);
+  readonly error = this.errorState.asReadonly();
 
   addDrone(request: AddDroneRequest): void {
     this.fire(this.http.post(`${this.base}/drones`, request));
@@ -44,7 +47,19 @@ export class FleetService {
   }
 
   createMission(request: CreateMissionRequest): void {
-    this.fire(this.http.post(`${this.base}/missions`, request));
+    this.errorState.set('');
+    this.http
+      .post(`${this.base}/missions`, request)
+      .pipe(
+        catchError((err: HttpErrorResponse) => {
+          this.errorState.set(
+            typeof err.error === 'string' ? err.error.trim() : 'mission rejected',
+          );
+          return of(null);
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
   }
 
   deleteMission(id: string): void {

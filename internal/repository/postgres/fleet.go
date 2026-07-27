@@ -8,7 +8,52 @@ import (
 	"uavmonitor/internal/fleet"
 )
 
-var _ fleet.Store = (*Repository)(nil)
+var (
+	_ fleet.Store     = (*Repository)(nil)
+	_ fleet.ZoneGuard = (*Repository)(nil)
+)
+
+func (r *Repository) RestrictedWaypoints(ctx context.Context, waypoints []fleet.Waypoint) ([]int, error) {
+	if len(waypoints) == 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	lons := make([]float64, len(waypoints))
+	lats := make([]float64, len(waypoints))
+	for i, w := range waypoints {
+		lons[i] = w.Longitude
+		lats[i] = w.Latitude
+	}
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT w.idx - 1
+		   FROM unnest($1::float8[], $2::float8[]) WITH ORDINALITY AS w(lon, lat, idx)
+		  WHERE EXISTS (
+		    SELECT 1 FROM custom_zones z
+		     WHERE ST_Contains(z.boundary, ST_SetSRID(ST_MakePoint(w.lon, w.lat), 4326))
+		  )`,
+		lons, lats,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query restricted waypoints: %w", err)
+	}
+	defer rows.Close()
+
+	var restricted []int
+	for rows.Next() {
+		var idx int
+		if err := rows.Scan(&idx); err != nil {
+			return nil, fmt.Errorf("scan restricted waypoint: %w", err)
+		}
+		restricted = append(restricted, idx)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate restricted waypoints: %w", err)
+	}
+	return restricted, nil
+}
 
 func (r *Repository) ListDrones(ctx context.Context) ([]fleet.Drone, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)

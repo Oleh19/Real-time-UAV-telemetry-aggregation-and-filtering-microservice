@@ -103,6 +103,9 @@
           {{ draft().length }} waypoint(s) — click the map to add more.
         }
       </p>
+      @if (fleet.error() !== '') {
+        <p class="error" role="alert">{{ fleet.error() }}</p>
+      }
       <div class="planner-actions">
         <button type="button" [disabled]="!canCreate()" (click)="createMission()">
           Create mission

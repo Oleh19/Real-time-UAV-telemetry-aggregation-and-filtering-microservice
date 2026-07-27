@@ -14,6 +14,8 @@ import * as L from 'leaflet';
 import { DroneSample, HeatCell, ZoneFeatureCollection } from '../../../core/models/telemetry';
 import { TelemetryService } from '../../../core/telemetry.service';
 import { HeatmapService } from '../analytics/heatmap.service';
+import { FleetDrone } from '../../fleet/fleet.models';
+import { FleetService } from '../../fleet/fleet.service';
 import { TrackHistoryService } from '../history/track-history.service';
 import { DronePrediction, PredictionService } from '../prediction/prediction.service';
 import { CustomZonesService, ZoneVertex } from '../zones/custom-zones.service';
@@ -80,9 +82,18 @@ const predictionStyle: L.PolylineOptions = {
   opacity: 0.8,
 };
 
+const ownDroneStyle: L.CircleMarkerOptions = {
+  radius: 6,
+  color: '#2f9e44',
+  weight: 2,
+  fillColor: '#2f9e44',
+  fillOpacity: 0.5,
+};
+
 @Component({
   selector: 'app-drone-map',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [FleetService],
   template: '<div class="map" #mapHost></div>',
   styles: ':host { display: block; height: 100%; } .map { height: 100%; }',
 })
@@ -92,7 +103,9 @@ export class DroneMapComponent {
   private readonly customZones = inject(CustomZonesService);
   private readonly prediction = inject(PredictionService);
   private readonly heatmap = inject(HeatmapService);
+  private readonly fleet = inject(FleetService);
   private readonly mapHost = viewChild.required<ElementRef<HTMLDivElement>>('mapHost');
+  private readonly ownFleetLayer = L.layerGroup();
 
   private readonly mapReady = signal(false);
   private map?: L.Map;
@@ -185,6 +198,12 @@ export class DroneMapComponent {
       }
       this.styleCustomZones(this.telemetry.alarmedZoneIds());
     });
+    effect(() => {
+      if (!this.mapReady()) {
+        return;
+      }
+      this.renderOwnFleet(this.fleet.drones());
+    });
   }
 
   private initMap(): void {
@@ -198,6 +217,7 @@ export class DroneMapComponent {
       this.customZones.addVertex({ latitude: event.latlng.lat, longitude: event.latlng.lng });
     });
     this.map.on('moveend zoomend', () => this.scheduleDroneRender());
+    this.ownFleetLayer.addTo(this.map);
     this.mapReady.set(true);
   }
 
@@ -330,6 +350,18 @@ export class DroneMapComponent {
       );
     });
     this.heatLayer = L.layerGroup(rectangles).addTo(this.map);
+  }
+
+  private renderOwnFleet(drones: FleetDrone[]): void {
+    if (!this.map) {
+      return;
+    }
+    this.ownFleetLayer.clearLayers();
+    for (const drone of drones) {
+      L.circleMarker([drone.latitude, drone.longitude], ownDroneStyle)
+        .bindTooltip(`own · ${drone.id} · ${drone.status} · ${Math.round(drone.battery)}%`)
+        .addTo(this.ownFleetLayer);
+    }
   }
 
   private renderPredictions(predictions: DronePrediction[]): void {
