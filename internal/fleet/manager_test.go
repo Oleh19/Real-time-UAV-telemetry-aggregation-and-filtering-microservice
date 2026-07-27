@@ -235,6 +235,35 @@ func TestRemoveDroneBlockedByPendingMission(t *testing.T) {
 	}
 }
 
+func TestStatsCountsCompletedAndAborted(t *testing.T) {
+	m := newManager()
+	mustDrone(t, m, "uav-1", 50, 30)
+	done, _ := m.CreateMission(context.Background(), "near", "uav-1", []Waypoint{{50.02, 30}})
+	if _, err := m.Launch(context.Background(), done.ID); err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	for range 200 {
+		m.tick()
+		if droneState(m, "uav-1").Status == StatusIdle {
+			break
+		}
+	}
+	aborted, _ := m.CreateMission(context.Background(), "far", "uav-1", []Waypoint{{55, 30}})
+	if _, err := m.Launch(context.Background(), aborted.ID); err != nil {
+		t.Fatalf("Launch far: %v", err)
+	}
+	if _, err := m.Abort(context.Background(), aborted.ID); err != nil {
+		t.Fatalf("Abort: %v", err)
+	}
+	stats := m.Stats()
+	if stats.Completed != 1 {
+		t.Fatalf("completed = %d, want 1", stats.Completed)
+	}
+	if stats.Aborted != 1 {
+		t.Fatalf("aborted = %d, want 1", stats.Aborted)
+	}
+}
+
 func TestLoadResetsInFlightState(t *testing.T) {
 	store := newMemStore()
 	store.drones["uav-1"] = Drone{ID: "uav-1", Model: "quad", Status: StatusEnRoute, Base: Waypoint{50, 30}, MissionID: "mission-001"}

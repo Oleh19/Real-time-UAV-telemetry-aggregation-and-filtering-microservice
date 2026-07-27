@@ -23,7 +23,7 @@ type fakeFleet struct {
 }
 
 func (f *fakeFleet) Snapshot() fleet.FleetSnapshot { return f.snapshot }
-func (f *fakeFleet) Stats() (int, int, int)        { return 1, 0, 0 }
+func (f *fakeFleet) Stats() fleet.FleetStats       { return fleet.FleetStats{Drones: 1} }
 func (f *fakeFleet) AddDrone(_ context.Context, d fleet.Drone) (fleet.Drone, error) {
 	if f.addErr != nil {
 		return fleet.Drone{}, f.addErr

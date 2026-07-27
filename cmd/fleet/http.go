@@ -17,7 +17,7 @@ const maxBodyBytes = 64 * 1024
 
 type fleetService interface {
 	Snapshot() fleet.FleetSnapshot
-	Stats() (drones, airborne, activeMissions int)
+	Stats() fleet.FleetStats
 	AddDrone(ctx context.Context, drone fleet.Drone) (fleet.Drone, error)
 	RemoveDrone(ctx context.Context, id string) error
 	CreateMission(ctx context.Context, name, droneID string, waypoints []fleet.Waypoint) (fleet.Mission, error)

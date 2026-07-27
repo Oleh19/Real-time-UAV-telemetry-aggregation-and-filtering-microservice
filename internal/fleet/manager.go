@@ -43,12 +43,14 @@ type Store interface {
 }
 
 type Manager struct {
-	store    Store
-	logger   *slog.Logger
-	mu       sync.Mutex
-	drones   map[string]*Drone
-	missions map[string]*Mission
-	nextID   atomic.Int64
+	store          Store
+	logger         *slog.Logger
+	mu             sync.Mutex
+	drones         map[string]*Drone
+	missions       map[string]*Mission
+	nextID         atomic.Int64
+	completedTotal atomic.Int64
+	abortedTotal   atomic.Int64
 }
 
 func NewManager(store Store, logger *slog.Logger) *Manager {
@@ -262,6 +264,7 @@ func (m *Manager) Abort(ctx context.Context, missionID string) (Mission, error) 
 		}
 		mission.State = MissionAborted
 		drone.Status = StatusReturning
+		m.abortedTotal.Add(1)
 		return nil
 	})
 }
@@ -305,6 +308,7 @@ func (m *Manager) Recall(ctx context.Context, droneID string) (Drone, error) {
 	var aborted *Mission
 	if mission, ok := m.missions[drone.MissionID]; ok && (mission.State == MissionActive || mission.State == MissionPaused) {
 		mission.State = MissionAborted
+		m.abortedTotal.Add(1)
 		snapshot := *mission
 		aborted = &snapshot
 	}
@@ -320,21 +324,37 @@ func (m *Manager) Recall(ctx context.Context, droneID string) (Drone, error) {
 	return result, nil
 }
 
-func (m *Manager) Stats() (drones, airborne, activeMissions int) {
+type FleetStats struct {
+	Drones         int
+	Airborne       int
+	ActiveMissions int
+	LowBattery     int
+	Completed      int64
+	Aborted        int64
+}
+
+func (m *Manager) Stats() FleetStats {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	drones = len(m.drones)
+	stats := FleetStats{
+		Drones:    len(m.drones),
+		Completed: m.completedTotal.Load(),
+		Aborted:   m.abortedTotal.Load(),
+	}
 	for _, d := range m.drones {
 		if d.Status.InFlight() {
-			airborne++
+			stats.Airborne++
+		}
+		if d.Battery <= lowBattery {
+			stats.LowBattery++
 		}
 	}
 	for _, ms := range m.missions {
 		if ms.State == MissionActive {
-			activeMissions++
+			stats.ActiveMissions++
 		}
 	}
-	return drones, airborne, activeMissions
+	return stats
 }
 
 func (m *Manager) Run(ctx context.Context, interval time.Duration) {
@@ -373,6 +393,7 @@ func (m *Manager) tick() []Mission {
 			if drone.Battery <= lowBattery {
 				if mission := m.missions[drone.MissionID]; mission != nil && mission.State == MissionPaused {
 					mission.State = MissionAborted
+					m.abortedTotal.Add(1)
 					changed = append(changed, *mission)
 				}
 				drone.Status = StatusReturning
@@ -395,11 +416,13 @@ func (m *Manager) advanceMission(drone *Drone, mission *Mission) (missionChanged
 	if drone.Battery <= lowBattery {
 		mission.State = MissionAborted
 		drone.Status = StatusReturning
+		m.abortedTotal.Add(1)
 		return true
 	}
 	if mission.Progress >= len(mission.Waypoints) {
 		mission.State = MissionCompleted
 		drone.Status = StatusReturning
+		m.completedTotal.Add(1)
 		return true
 	}
 	target := mission.Waypoints[mission.Progress]
@@ -410,6 +433,7 @@ func (m *Manager) advanceMission(drone *Drone, mission *Mission) (missionChanged
 		if mission.Progress >= len(mission.Waypoints) {
 			mission.State = MissionCompleted
 			drone.Status = StatusReturning
+			m.completedTotal.Add(1)
 			return true
 		}
 	}

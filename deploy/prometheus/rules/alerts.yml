@@ -2,7 +2,7 @@ groups:
   - name: uav-availability
     rules:
       - alert: ServiceDown
-        expr: up{job=~"server|geofence|notifier"} == 0
+        expr: up{job=~"server|geofence|notifier|fleet"} == 0
         for: 1m
         labels:
           severity: critical
@@ -87,6 +87,26 @@ groups:
         annotations:
           summary: 'Outbound alert notifications are failing'
           description: 'The notifier has failed to deliver breach notifications for five minutes; the webhook or Telegram sink is unreachable.'
+
+  - name: uav-fleet
+    rules:
+      - alert: FleetLowBattery
+        expr: sum(uav_fleet_low_battery) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $value }} fleet drone(s) at low battery'
+          description: 'One or more own drones are at or below the low-battery threshold; they will auto-return.'
+
+      - alert: FleetMissionAborts
+        expr: sum(rate(uav_fleet_missions_aborted_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Fleet missions are aborting'
+          description: 'Own-drone missions have been aborting (command, recall or low battery) for five minutes; check the fleet.'
 
   - name: uav-sensor-network
     rules:
