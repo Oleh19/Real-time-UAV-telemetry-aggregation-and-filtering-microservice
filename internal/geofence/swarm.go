@@ -1,10 +1,11 @@
 package geofence
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -207,7 +208,7 @@ func (d *SwarmDetector) Snapshot() []Swarm {
 	for _, state := range d.active {
 		swarms = append(swarms, state.swarm)
 	}
-	sort.Slice(swarms, func(i, j int) bool { return swarms[i].ID < swarms[j].ID })
+	slices.SortFunc(swarms, func(a, b Swarm) int { return cmp.Compare(a.ID, b.ID) })
 	return swarms
 }
 
@@ -226,6 +227,6 @@ func sortedIDs(members map[telemetry.DroneID]struct{}) []string {
 	for id := range members {
 		ids = append(ids, string(id))
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }

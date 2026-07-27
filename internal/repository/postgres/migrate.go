@@ -1,11 +1,12 @@
 package postgres
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"fmt"
 	"io/fs"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -116,8 +117,8 @@ func loadMigrations() ([]migration, error) {
 		migrations = append(migrations, migration{version: version, name: entry.Name(), sql: string(body)})
 	}
 
-	sort.Slice(migrations, func(i, j int) bool {
-		return migrations[i].version < migrations[j].version
+	slices.SortFunc(migrations, func(a, b migration) int {
+		return cmp.Compare(a.version, b.version)
 	})
 	return migrations, nil
 }

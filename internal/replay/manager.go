@@ -1,11 +1,12 @@
 package replay
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -259,7 +260,7 @@ func (m *Manager) List() []Status {
 	for _, active := range m.runs {
 		statuses = append(statuses, active.snapshot())
 	}
-	sort.Slice(statuses, func(i, j int) bool { return statuses[i].ID < statuses[j].ID })
+	slices.SortFunc(statuses, func(a, b Status) int { return cmp.Compare(a.ID, b.ID) })
 	return statuses
 }
 
@@ -323,8 +324,8 @@ func (m *Manager) pruneFinishedLocked() {
 	if len(finished) <= maxFinishedRuns {
 		return
 	}
-	sort.Slice(finished, func(i, j int) bool {
-		return replaySeq(finished[i]) < replaySeq(finished[j])
+	slices.SortFunc(finished, func(a, b string) int {
+		return cmp.Compare(replaySeq(a), replaySeq(b))
 	})
 	for _, id := range finished[:len(finished)-maxFinishedRuns] {
 		delete(m.runs, id)

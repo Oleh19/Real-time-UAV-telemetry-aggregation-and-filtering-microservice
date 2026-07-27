@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -119,7 +120,7 @@ func polygonGeoJSON(ring [][2]float64) (json.RawMessage, error) {
 	}
 	closed := ring
 	if ring[0] != ring[len(ring)-1] {
-		closed = append(append([][2]float64{}, ring...), ring[0])
+		closed = append(slices.Clone(ring), ring[0])
 	}
 	geometry, err := json.Marshal(map[string]any{
 		"type":        "Polygon",

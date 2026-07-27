@@ -1,10 +1,11 @@
 package stations
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -180,7 +181,7 @@ func (r *Registry) Snapshot() []Info {
 		})
 		return true
 	})
-	sort.Slice(infos, func(i, j int) bool { return infos[i].ID < infos[j].ID })
+	slices.SortFunc(infos, func(a, b Info) int { return cmp.Compare(a.ID, b.ID) })
 	return infos
 }
 

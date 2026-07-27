@@ -105,7 +105,7 @@ func runConsumers(ctx context.Context, deps *dependencies, cfg config.Geofence) 
 	}()
 
 	var runErr error
-	for n := 0; n < 4; n++ {
+	for range cap(errCh) {
 		if err := <-errCh; err != nil && runErr == nil {
 			runErr = err
 			cancelRun()

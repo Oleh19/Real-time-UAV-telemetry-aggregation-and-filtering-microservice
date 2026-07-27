@@ -91,8 +91,8 @@ func (s Sample) Validate() error {
 	return nil
 }
 
-func inRange(v, min, max float64) bool {
-	return v >= min && v <= max
+func inRange(v, lo, hi float64) bool {
+	return v >= lo && v <= hi
 }
 
 type Zone struct {
