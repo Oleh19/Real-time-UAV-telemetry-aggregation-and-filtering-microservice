@@ -26,7 +26,7 @@ type fleetService interface {
 	Pause(ctx context.Context, missionID string) (fleet.Mission, error)
 	Resume(ctx context.Context, missionID string) (fleet.Mission, error)
 	Abort(ctx context.Context, missionID string) (fleet.Mission, error)
-	Recall(droneID string) (fleet.Drone, error)
+	Recall(ctx context.Context, droneID string) (fleet.Drone, error)
 }
 
 type addDroneRequest struct {
@@ -71,8 +71,7 @@ func newHTTPHandler(manager fleetService, pool *pgxpool.Pool, logger *slog.Logge
 			writeFleetError(w, err, logger)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, drone, logger)
+		writeJSONStatus(w, http.StatusCreated, drone, logger)
 	})
 	mux.HandleFunc("DELETE /fleet/drones/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if err := manager.RemoveDrone(r.Context(), r.PathValue("id")); err != nil {
@@ -82,7 +81,7 @@ func newHTTPHandler(manager fleetService, pool *pgxpool.Pool, logger *slog.Logge
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /fleet/drones/{id}/recall", func(w http.ResponseWriter, r *http.Request) {
-		drone, err := manager.Recall(r.PathValue("id"))
+		drone, err := manager.Recall(r.Context(), r.PathValue("id"))
 		if err != nil {
 			writeFleetError(w, err, logger)
 			return
@@ -100,8 +99,7 @@ func newHTTPHandler(manager fleetService, pool *pgxpool.Pool, logger *slog.Logge
 			writeFleetError(w, err, logger)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, mission, logger)
+		writeJSONStatus(w, http.StatusCreated, mission, logger)
 	})
 	mux.HandleFunc("DELETE /fleet/missions/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if err := manager.DeleteMission(r.Context(), r.PathValue("id")); err != nil {
@@ -147,7 +145,12 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 func writeJSON(w http.ResponseWriter, v any, logger *slog.Logger) {
+	writeJSONStatus(w, http.StatusOK, v, logger)
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, v any, logger *slog.Logger) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		logger.Error("encode fleet response", "error", err)
 	}

@@ -1,9 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   afterNextRender,
   effect,
+  inject,
   input,
   output,
   signal,
@@ -47,6 +49,10 @@ export class FleetMapComponent {
 
   constructor() {
     afterNextRender(() => this.initMap());
+    inject(DestroyRef).onDestroy(() => {
+      this.map?.remove();
+      this.map = undefined;
+    });
     effect(() => {
       const drones = this.drones();
       if (this.ready()) {

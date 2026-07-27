@@ -35,7 +35,7 @@ describe('FleetService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), FleetService],
     });
     http = TestBed.inject(HttpTestingController);
   });

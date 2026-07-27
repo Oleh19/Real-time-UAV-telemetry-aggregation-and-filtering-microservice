@@ -117,6 +117,8 @@ export class DroneMapComponent {
       if (this.droneFrame !== 0) {
         cancelAnimationFrame(this.droneFrame);
       }
+      this.map?.remove();
+      this.map = undefined;
     });
     effect(() => {
       if (!this.mapReady()) {

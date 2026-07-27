@@ -14,7 +14,7 @@ import {
 
 const pollIntervalMs = 1000;
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class FleetService {
   private readonly http = inject(HttpClient);
   private readonly destroyRef = inject(DestroyRef);

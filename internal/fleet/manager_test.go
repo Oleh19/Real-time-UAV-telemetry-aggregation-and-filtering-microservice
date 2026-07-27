@@ -162,13 +162,14 @@ func TestPauseResumeAbort(t *testing.T) {
 }
 
 func TestRecallAbortsActiveMission(t *testing.T) {
-	m := newManager()
+	store := newMemStore()
+	m := NewManager(store, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	mustDrone(t, m, "uav-1", 50, 30)
 	mission, _ := m.CreateMission(context.Background(), "recon", "uav-1", []Waypoint{{55, 30}})
 	if _, err := m.Launch(context.Background(), mission.ID); err != nil {
 		t.Fatalf("Launch: %v", err)
 	}
-	if _, err := m.Recall("uav-1"); err != nil {
+	if _, err := m.Recall(context.Background(), "uav-1"); err != nil {
 		t.Fatalf("Recall: %v", err)
 	}
 	if droneState(m, "uav-1").Status != StatusReturning {
@@ -177,7 +178,10 @@ func TestRecallAbortsActiveMission(t *testing.T) {
 	if missionState(m, mission.ID).State != MissionAborted {
 		t.Fatalf("recall did not abort mission")
 	}
-	if _, err := m.Recall("ghost"); !errors.Is(err, ErrDroneNotFound) {
+	if store.missions[mission.ID].State != MissionAborted {
+		t.Fatalf("recall did not persist the aborted mission: %s", store.missions[mission.ID].State)
+	}
+	if _, err := m.Recall(context.Background(), "ghost"); !errors.Is(err, ErrDroneNotFound) {
 		t.Fatalf("recall unknown = %v, want ErrDroneNotFound", err)
 	}
 }
@@ -217,6 +221,17 @@ func TestDeleteMissionBlockedWhileActive(t *testing.T) {
 	}
 	if err := m.RemoveDrone(context.Background(), "uav-1"); !errors.Is(err, ErrDroneBusy) {
 		t.Fatalf("remove busy drone = %v, want ErrDroneBusy", err)
+	}
+}
+
+func TestRemoveDroneBlockedByPendingMission(t *testing.T) {
+	m := newManager()
+	mustDrone(t, m, "uav-1", 50, 30)
+	if _, err := m.CreateMission(context.Background(), "recon", "uav-1", []Waypoint{{55, 30}}); err != nil {
+		t.Fatalf("CreateMission: %v", err)
+	}
+	if err := m.RemoveDrone(context.Background(), "uav-1"); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("remove drone with planned mission = %v, want ErrBadTransition", err)
 	}
 }
 

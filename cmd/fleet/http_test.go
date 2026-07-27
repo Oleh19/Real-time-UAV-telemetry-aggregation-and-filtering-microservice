@@ -52,7 +52,7 @@ func (f *fakeFleet) Resume(_ context.Context, id string) (fleet.Mission, error) 
 func (f *fakeFleet) Abort(_ context.Context, id string) (fleet.Mission, error) {
 	return fleet.Mission{ID: id, State: fleet.MissionAborted}, nil
 }
-func (f *fakeFleet) Recall(id string) (fleet.Drone, error) {
+func (f *fakeFleet) Recall(_ context.Context, id string) (fleet.Drone, error) {
 	f.recalledID = id
 	return fleet.Drone{ID: id, Status: fleet.StatusReturning}, nil
 }

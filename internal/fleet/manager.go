@@ -153,6 +153,12 @@ func (m *Manager) RemoveDrone(ctx context.Context, id string) error {
 		m.mu.Unlock()
 		return ErrDroneBusy
 	}
+	for _, mission := range m.missions {
+		if mission.DroneID == id && mission.State != MissionCompleted && mission.State != MissionAborted {
+			m.mu.Unlock()
+			return ErrBadTransition
+		}
+	}
 	delete(m.drones, id)
 	m.mu.Unlock()
 	if err := m.store.DeleteDrone(ctx, id); err != nil {
@@ -285,21 +291,33 @@ func (m *Manager) mutateMission(ctx context.Context, missionID string, apply fun
 	return result, nil
 }
 
-func (m *Manager) Recall(droneID string) (Drone, error) {
+func (m *Manager) Recall(ctx context.Context, droneID string) (Drone, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	drone, ok := m.drones[droneID]
 	if !ok {
+		m.mu.Unlock()
 		return Drone{}, ErrDroneNotFound
 	}
 	if !drone.Status.InFlight() {
+		m.mu.Unlock()
 		return Drone{}, ErrBadTransition
 	}
+	var aborted *Mission
 	if mission, ok := m.missions[drone.MissionID]; ok && (mission.State == MissionActive || mission.State == MissionPaused) {
 		mission.State = MissionAborted
+		snapshot := *mission
+		aborted = &snapshot
 	}
 	drone.Status = StatusReturning
-	return *drone, nil
+	result := *drone
+	m.mu.Unlock()
+
+	if aborted != nil {
+		if err := m.store.SaveMission(ctx, *aborted); err != nil {
+			return Drone{}, fmt.Errorf("persist aborted mission: %w", err)
+		}
+	}
+	return result, nil
 }
 
 func (m *Manager) Stats() (drones, airborne, activeMissions int) {

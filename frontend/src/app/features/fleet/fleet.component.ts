@@ -9,6 +9,7 @@ import { FleetService } from './fleet.service';
   selector: 'app-fleet',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FleetMapComponent, DecimalPipe],
+  providers: [FleetService],
   templateUrl: './fleet.component.html',
   styleUrl: './fleet.component.scss',
 })
