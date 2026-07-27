@@ -337,6 +337,34 @@ services:
       - ALL
     restart: on-failure
 
+  fleet:
+    build: .
+    entrypoint: ['/usr/local/bin/fleet']
+    environment:
+      POSTGRES_DSN: 'postgres://uav:${POSTGRES_PASSWORD:-uav}@postgres:5432/uav'
+      HTTP_ADDR: ':8083'
+      FLEET_TICK_INTERVAL: '${FLEET_TICK_INTERVAL:-1s}'
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://jaeger:4317'
+    ports:
+      - '8083:8083'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/fleet', '-healthcheck']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: on-failure
+
   frontend:
     build: ./frontend
     ports:
@@ -345,6 +373,8 @@ services:
       server:
         condition: service_healthy
       geofence:
+        condition: service_healthy
+      fleet:
         condition: service_healthy
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']

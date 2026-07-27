@@ -22,3 +22,7 @@ scrape_configs:
   - job_name: notifier
     static_configs:
       - targets: ['notifier:8082']
+
+  - job_name: fleet
+    static_configs:
+      - targets: ['fleet:8083']
