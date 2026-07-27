@@ -74,10 +74,9 @@ func (m *Manager) Load(ctx context.Context) error {
 	var maxSeq int64
 	for _, d := range drones {
 		drone := d
-		if drone.Status.InFlight() {
-			drone.Status = StatusIdle
-			drone.MissionID = ""
-		}
+		drone.Status = StatusIdle
+		drone.Battery = fullBattery
+		drone.MissionID = ""
 		drone.Latitude, drone.Longitude = drone.Base.Latitude, drone.Base.Longitude
 		m.drones[drone.ID] = &drone
 	}
@@ -301,6 +300,23 @@ func (m *Manager) Recall(droneID string) (Drone, error) {
 	}
 	drone.Status = StatusReturning
 	return *drone, nil
+}
+
+func (m *Manager) Stats() (drones, airborne, activeMissions int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	drones = len(m.drones)
+	for _, d := range m.drones {
+		if d.Status.InFlight() {
+			airborne++
+		}
+	}
+	for _, ms := range m.missions {
+		if ms.State == MissionActive {
+			activeMissions++
+		}
+	}
+	return drones, airborne, activeMissions
 }
 
 func (m *Manager) Run(ctx context.Context, interval time.Duration) {

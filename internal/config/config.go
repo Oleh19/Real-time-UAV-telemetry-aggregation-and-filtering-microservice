@@ -78,6 +78,28 @@ type Notifier struct {
 	TelegramBaseURL string
 }
 
+type Fleet struct {
+	PostgresDSN  string
+	HTTPAddr     string
+	TickInterval time.Duration
+}
+
+func LoadFleet() (Fleet, error) {
+	tick, err := env.Duration("FLEET_TICK_INTERVAL", time.Second)
+	if err != nil {
+		return Fleet{}, err
+	}
+	cfg := Fleet{
+		PostgresDSN:  env.String("POSTGRES_DSN", "postgres://uav:uav@localhost:5432/uav"),
+		HTTPAddr:     env.String("HTTP_ADDR", ":8083"),
+		TickInterval: tick,
+	}
+	if cfg.TickInterval < 100*time.Millisecond {
+		return Fleet{}, fmt.Errorf("validate FLEET_TICK_INTERVAL: must be >= 100ms, got %s", cfg.TickInterval)
+	}
+	return cfg, nil
+}
+
 func LoadServer() (Server, error) {
 	workerCount, err := env.Int("WORKER_COUNT", 8)
 	if err != nil {
