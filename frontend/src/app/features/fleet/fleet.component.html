@@ -1,0 +1,157 @@
+<div class="fleet">
+  <div class="map-pane">
+    <app-fleet-map
+      [drones]="fleet.drones()"
+      [missions]="fleet.missions()"
+      [draft]="draft()"
+      (mapClick)="onMapClick($event)"
+    />
+  </div>
+
+  <aside class="side-pane">
+    <section class="panel" aria-label="Fleet roster">
+      <header class="panel-header">
+        <h2>Fleet roster</h2>
+        <span class="count">{{ fleet.drones().length }}</span>
+      </header>
+      @if (fleet.drones().length > 0) {
+        <ul class="roster">
+          @for (drone of fleet.drones(); track drone.id) {
+            <li class="drone">
+              <div class="drone-head">
+                <span class="drone-id">{{ drone.id }}</span>
+                <span class="drone-status" [attr.data-status]="drone.status">{{
+                  drone.status
+                }}</span>
+              </div>
+              <div class="drone-meta">{{ drone.model }} · fw {{ drone.firmware }}</div>
+              <div class="battery-track">
+                <span [class]="batteryClass(drone.battery)" [style.width.%]="drone.battery"></span>
+              </div>
+              <div class="drone-actions">
+                <span class="battery-label">{{ drone.battery | number: '1.0-0' }}%</span>
+                <button
+                  type="button"
+                  [disabled]="drone.status === 'idle' || drone.status === 'charging'"
+                  (click)="fleet.recall(drone.id)"
+                >
+                  recall
+                </button>
+                <button
+                  type="button"
+                  class="danger"
+                  [disabled]="drone.status !== 'idle' && drone.status !== 'charging'"
+                  (click)="fleet.removeDrone(drone.id)"
+                >
+                  remove
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="placeholder">No drones registered</p>
+      }
+      <form class="add-drone" (submit)="addDrone(); $event.preventDefault()">
+        <input
+          type="text"
+          placeholder="id"
+          aria-label="New drone id"
+          [value]="newDroneId()"
+          (input)="newDroneId.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="model"
+          aria-label="New drone model"
+          [value]="newDroneModel()"
+          (input)="newDroneModel.set($any($event.target).value)"
+        />
+        <button type="submit">Add drone</button>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Mission planner">
+      <header class="panel-header">
+        <h2>Mission planner</h2>
+      </header>
+      <label class="field">
+        <span>Drone</span>
+        <select
+          [value]="selectedDroneId()"
+          (change)="selectedDroneId.set($any($event.target).value)"
+        >
+          <option value="">select a drone…</option>
+          @for (drone of fleet.drones(); track drone.id) {
+            <option [value]="drone.id">{{ drone.id }}</option>
+          }
+        </select>
+      </label>
+      <label class="field">
+        <span>Name</span>
+        <input
+          type="text"
+          placeholder="mission name"
+          [value]="missionName()"
+          (input)="missionName.set($any($event.target).value)"
+        />
+      </label>
+      <p class="hint">
+        @if (selectedDroneId() === '') {
+          Select a drone, then click the map to drop waypoints.
+        } @else {
+          {{ draft().length }} waypoint(s) — click the map to add more.
+        }
+      </p>
+      <div class="planner-actions">
+        <button type="button" [disabled]="!canCreate()" (click)="createMission()">
+          Create mission
+        </button>
+        <button type="button" [disabled]="draft().length === 0" (click)="undoWaypoint()">
+          Undo point
+        </button>
+        <button type="button" [disabled]="draft().length === 0" (click)="clearDraft()">
+          Clear
+        </button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Missions">
+      <header class="panel-header">
+        <h2>Missions</h2>
+        <span class="count">{{ fleet.missions().length }}</span>
+      </header>
+      @if (fleet.missions().length > 0) {
+        <ul class="missions">
+          @for (mission of fleet.missions(); track mission.id) {
+            <li class="mission" [attr.data-state]="mission.state">
+              <div class="mission-head">
+                <span class="mission-name">{{ mission.name }}</span>
+                <span class="mission-state">{{ mission.state }}</span>
+              </div>
+              <div class="mission-meta">
+                {{ mission.droneId }} · {{ mission.progress }}/{{ mission.waypoints.length }} wp
+              </div>
+              <div class="mission-actions">
+                @if (mission.state === 'active') {
+                  <button type="button" (click)="action(mission, 'pause')">pause</button>
+                  <button type="button" (click)="action(mission, 'abort')">abort</button>
+                } @else if (mission.state === 'paused') {
+                  <button type="button" (click)="action(mission, 'resume')">resume</button>
+                  <button type="button" (click)="action(mission, 'abort')">abort</button>
+                } @else {
+                  <button type="button" (click)="action(mission, 'launch')">launch</button>
+                  <button type="button" class="danger" (click)="fleet.deleteMission(mission.id)">
+                    delete
+                  </button>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="placeholder">No missions yet</p>
+      }
+    </section>
+  </aside>
+</div>

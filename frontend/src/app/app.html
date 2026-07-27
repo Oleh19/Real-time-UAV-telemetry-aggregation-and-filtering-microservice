@@ -1,6 +1,12 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="app-header">
   <h1>UAV Telemetry Monitor</h1>
+  <nav class="app-nav" aria-label="Primary views">
+    <a routerLink="/" routerLinkActive="app-nav-active" [routerLinkActiveOptions]="{ exact: true }"
+      >Monitoring</a
+    >
+    <a routerLink="/fleet" routerLinkActive="app-nav-active">Fleet</a>
+  </nav>
   <button
     type="button"
     class="theme-toggle"

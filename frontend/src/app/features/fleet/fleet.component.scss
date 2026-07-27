@@ -1,0 +1,217 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.fleet {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: var(--space-3);
+  height: 100%;
+  padding: var(--space-3);
+}
+
+.map-pane {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.map-pane app-fleet-map {
+  height: 100%;
+}
+
+.side-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.roster,
+.missions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.drone,
+.mission {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  font-size: 0.75rem;
+}
+
+.mission[data-state='active'] {
+  border-color: var(--color-accent);
+}
+
+.mission[data-state='aborted'] {
+  border-color: var(--color-danger);
+}
+
+.drone-head,
+.mission-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.drone-status,
+.mission-state {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.drone-status[data-status='en-route'],
+.drone-status[data-status='returning'],
+.drone-status[data-status='holding'] {
+  color: var(--color-accent);
+}
+
+.drone-status[data-status='maintenance'] {
+  color: var(--color-danger);
+}
+
+.drone-meta,
+.mission-meta {
+  color: var(--color-text-muted);
+  margin: 2px 0;
+}
+
+.battery-track {
+  height: 6px;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  overflow: hidden;
+  margin: var(--space-1) 0;
+}
+
+.battery {
+  display: block;
+  height: 100%;
+}
+
+.battery-high {
+  background: var(--color-ok);
+}
+
+.battery-medium {
+  background: var(--color-warn);
+}
+
+.battery-low {
+  background: var(--color-danger);
+}
+
+.drone-actions,
+.mission-actions,
+.planner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.battery-label {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+button {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+button.danger {
+  color: var(--color-danger);
+}
+
+.add-drone {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.add-drone input {
+  min-width: 0;
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-2);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+input,
+select {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8rem;
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.hint {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.placeholder {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .fleet {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 1fr) auto;
+    height: auto;
+  }
+}
