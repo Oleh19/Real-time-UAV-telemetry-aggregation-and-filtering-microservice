@@ -56,12 +56,14 @@ describe('BreachFeedService', () => {
     tick();
     http.expectOne((req) => req.url === '/api/breaches').flush([record()]);
     expect(service.breaches().length).toBe(1);
+    expect(service.connected()).toBeTrue();
 
     tick(5000);
     http
       .expectOne((req) => req.url === '/api/breaches')
       .flush('boom', { status: 500, statusText: 'Internal Server Error' });
     expect(service.breaches().length).toBe(1);
+    expect(service.connected()).toBeFalse();
 
     discardPeriodicTasks();
   }));

@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { catchError, filter, of, switchMap, timer } from 'rxjs';
+import { catchError, filter, of, switchMap, tap, timer } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -20,18 +20,28 @@ export class FleetService {
   private readonly destroyRef = inject(DestroyRef);
   private readonly base = `${environment.apiBaseUrl}/fleet`;
 
+  private readonly connectedState = signal(true);
+  private readonly errorState = signal('');
+
   private readonly snapshot = toSignal(
     timer(0, pollIntervalMs).pipe(
-      switchMap(() => this.http.get<FleetSnapshot>(this.base).pipe(catchError(() => of(null)))),
+      switchMap(() =>
+        this.http.get<FleetSnapshot>(this.base).pipe(
+          tap(() => this.connectedState.set(true)),
+          catchError(() => {
+            this.connectedState.set(false);
+            return of(null);
+          }),
+        ),
+      ),
       filter((snap): snap is FleetSnapshot => snap !== null),
     ),
     { initialValue: EMPTY_FLEET },
   );
 
-  private readonly errorState = signal('');
-
   readonly drones = computed(() => this.snapshot().drones);
   readonly missions = computed(() => this.snapshot().missions);
+  readonly connected = this.connectedState.asReadonly();
   readonly error = this.errorState.asReadonly();
 
   addDrone(request: AddDroneRequest): void {

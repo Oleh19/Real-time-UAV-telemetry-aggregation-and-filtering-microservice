@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
-import { DestroyRef, Injectable, inject } from '@angular/core';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { catchError, filter, of, switchMap, timer } from 'rxjs';
+import { catchError, filter, of, switchMap, tap, timer } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
 import { BreachRecord } from '../../../core/models/telemetry';
@@ -13,6 +13,9 @@ const feedLimit = 50;
 export class BreachFeedService {
   private readonly http = inject(HttpClient);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly connectedState = signal(true);
+
+  readonly connected = this.connectedState.asReadonly();
 
   readonly breaches = toSignal(
     timer(0, pollIntervalMs).pipe(
@@ -21,7 +24,13 @@ export class BreachFeedService {
           .get<BreachRecord[]>(`${environment.apiBaseUrl}/breaches`, {
             params: { limit: feedLimit },
           })
-          .pipe(catchError(() => of(null))),
+          .pipe(
+            tap(() => this.connectedState.set(true)),
+            catchError(() => {
+              this.connectedState.set(false);
+              return of(null);
+            }),
+          ),
       ),
       filter((records): records is BreachRecord[] => records !== null),
     ),

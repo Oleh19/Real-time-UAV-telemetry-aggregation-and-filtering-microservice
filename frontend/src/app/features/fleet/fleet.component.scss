@@ -211,6 +211,15 @@ select:focus-visible {
   font-size: 0.72rem;
 }
 
+.offline {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-danger);
+  color: var(--color-text);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
 .placeholder {
   margin: 0;
   color: var(--color-text-muted);

@@ -12,7 +12,11 @@
     <section class="panel" aria-label="Fleet roster">
       <header class="panel-header">
         <h2>Fleet roster</h2>
-        <span class="count">{{ fleet.drones().length }}</span>
+        @if (!fleet.connected()) {
+          <span class="offline" role="status">offline</span>
+        } @else {
+          <span class="count">{{ fleet.drones().length }}</span>
+        }
       </header>
       @if (fleet.drones().length > 0) {
         <ul class="roster">

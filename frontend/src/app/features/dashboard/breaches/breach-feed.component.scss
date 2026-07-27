@@ -1,3 +1,13 @@
+.offline {
+  margin-right: auto;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius);
+  background: var(--color-danger);
+  color: var(--color-text);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+
 .export {
   display: flex;
   gap: var(--space-1);

@@ -1,6 +1,9 @@
 <section class="panel" aria-label="Zone breach journal">
   <header class="panel-header">
     <h2>Breach journal</h2>
+    @if (!feed.connected()) {
+      <span class="offline" role="status">offline</span>
+    }
     <span class="export">
       <a class="export-link" [href]="csvUrl" download>CSV</a>
       <a class="export-link" [href]="geojsonUrl" download>GeoJSON</a>

@@ -1,6 +1,9 @@
 <section class="panel" aria-label="Detected swarms">
   <header class="panel-header">
     <h2>Swarms</h2>
+    @if (!feed.connected()) {
+      <span class="offline" role="status">offline</span>
+    }
     <span class="swarm-count" [class.swarm-count-active]="feed.swarms().length > 0">
       {{ feed.swarms().length }}
     </span>
